@@ -1,0 +1,35 @@
+{
+  "expo": {
+    "name": "DriveOn",
+    "slug": "drive-on-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFE282"
+    },
+    "android": {
+      "package": "com.driveon.app",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFE282"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow DriveOn to access your photos to upload receipts."
+        }
+      ],
+      "@react-native-community/datetimepicker"
+    ]
+  }
+}
