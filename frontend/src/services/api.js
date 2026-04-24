@@ -1,33 +1,27 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import Constants from 'expo-constants';
 
+const DEPLOYED_URL = 'https://driveon-driving-school-management-system-production.up.railway.app';
 
-const DEPLOYED_URL = 'https://driveon-backend.onrender.com'; // ← update after deploying to Render
+export const BASE_URL = DEPLOYED_URL;
 
-const getBaseUrl = () => {
-  if (__DEV__) {
-    const hostUri = Constants.expoConfig?.hostUri ?? Constants.manifest?.debuggerHost;
-    if (hostUri) return `http://${hostUri.split(':')[0]}:7070`;
-  }
-  return DEPLOYED_URL;
-};
-
-export const BASE_URL = getBaseUrl();
-
-const api = axios.create({ 
+const api = axios.create({
   baseURL: `${BASE_URL}/api`,
-  timeout: 10000 // Add timeout for better error handling
+  timeout: 10000,
 });
 
 // Attach JWT token to every request automatically
 api.interceptors.request.use(async (config) => {
   const token = await SecureStore.getItemAsync('token');
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
   return config;
 });
 
-// Handle response errors silently
+// Handle response errors
 api.interceptors.response.use(
   (response) => response,
   (error) => Promise.reject(error)
@@ -99,12 +93,12 @@ export const markStaffAttendance     = (data)   => api.post('/staff/attendance',
 export const getStaffPerformance     = (params) => api.get('/staff/performance', { params });
 
 // ── Notifications ───────────────────────────────────────────────────────────────
-export const getNotifications      = (params) => api.get('/notifications', { params });
-export const sendNotification       = (data)   => api.post('/notifications', data);
-export const markNotificationRead   = (id)      => api.patch(`/notifications/${id}/read`);
-export const markAllNotificationsRead = ()     => api.patch('/notifications/read-all');
-export const deleteNotification     = (id)      => api.delete(`/notifications/${id}`);
-export const getNotificationStats   = ()       => api.get('/notifications/stats');
+export const getNotifications        = (params) => api.get('/notifications', { params });
+export const sendNotification        = (data)   => api.post('/notifications', data);
+export const markNotificationRead    = (id)     => api.patch(`/notifications/${id}/read`);
+export const markAllNotificationsRead = ()      => api.patch('/notifications/read-all');
+export const deleteNotification      = (id)     => api.delete(`/notifications/${id}`);
+export const getNotificationStats    = ()       => api.get('/notifications/stats');
 
 // ── Inquiries ────────────────────────────────────────────────────────────────────
 export const getInquiries      = (params) => api.get('/inquiries', { params });
