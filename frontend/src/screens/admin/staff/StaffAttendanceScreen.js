@@ -13,8 +13,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 
 import {
+  getAttendanceMembers,
   getStaffAttendance,
   markStaffAttendance,
 } from '../../../services/api';
@@ -31,6 +34,7 @@ const StaffAttendanceScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   const formatDate = date => {
     const d = new Date(date);
@@ -45,24 +49,53 @@ const StaffAttendanceScreen = ({ navigation }) => {
   };
 
   const getInstructorId = instructor => {
-    return (
-      instructor?.instructorId ||
-      instructor?.employeeId ||
-      instructor?._id ||
-      'N/A'
-    );
+    return instructor?.licenseNo || instructor?._id || 'N/A';
   };
 
   const loadAttendance = useCallback(async () => {
     try {
       const date = formatDate(selectedDate);
 
-      const response = await getStaffAttendance({ date });
+      const [membersResponse, attendanceResponse] = await Promise.all([
+        getAttendanceMembers(),
+        getStaffAttendance({ date }),
+      ]);
 
-      const data = response.data;
+      const membersData = membersResponse.data;
+      const attendanceData = attendanceResponse.data;
 
-      setStaffAttendance(data.staffAttendance || []);
-      setInstructorAttendance(data.instructorAttendance || []);
+      const allStaff = membersData.staff || [];
+      const allInstructors = membersData.instructors || [];
+
+      const savedStaffAttendance = attendanceData.staffAttendance || [];
+      const savedInstructorAttendance = attendanceData.instructorAttendance || [];
+
+      const preparedStaffAttendance = allStaff.map(staff => {
+        const existing = savedStaffAttendance.find(item => {
+          const savedStaffId = item.staff?._id || item.staff;
+          return savedStaffId === staff._id;
+        });
+
+        return {
+          staff,
+          attended: existing ? Boolean(existing.attended) : false,
+        };
+      });
+
+      const preparedInstructorAttendance = allInstructors.map(instructor => {
+        const existing = savedInstructorAttendance.find(item => {
+          const savedInstructorId = item.instructor?._id || item.instructor;
+          return savedInstructorId === instructor._id;
+        });
+
+        return {
+          instructor,
+          attended: existing ? Boolean(existing.attended) : false,
+        };
+      });
+
+      setStaffAttendance(preparedStaffAttendance);
+      setInstructorAttendance(preparedInstructorAttendance);
     } catch (error) {
       console.error('Load attendance error:', error);
       Alert.alert(
@@ -156,6 +189,233 @@ const StaffAttendanceScreen = ({ navigation }) => {
     }
   };
 
+  const generateReportHtml = () => {
+    const date = formatDate(selectedDate);
+
+    const totalStaff = staffAttendance.length;
+    const presentStaff = staffAttendance.filter(item => item.attended).length;
+    const absentStaff = totalStaff - presentStaff;
+
+    const totalInstructors = instructorAttendance.length;
+    const presentInstructors = instructorAttendance.filter(item => item.attended).length;
+    const absentInstructors = totalInstructors - presentInstructors;
+
+    const staffRows = staffAttendance
+      .map((item, index) => {
+        const staff = item.staff;
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${staff?.employeeId || 'N/A'}</td>
+            <td>${getPersonName(staff)}</td>
+            <td>${staff?.position || 'N/A'}</td>
+            <td class="${item.attended ? 'present' : 'absent'}">
+              ${item.attended ? 'Present' : 'Absent'}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    const instructorRows = instructorAttendance
+      .map((item, index) => {
+        const instructor = item.instructor;
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${getInstructorId(instructor)}</td>
+            <td>${getPersonName(instructor)}</td>
+            <td>${instructor?.contactNumber || 'N/A'}</td>
+            <td class="${item.attended ? 'present' : 'absent'}">
+              ${item.attended ? 'Present' : 'Absent'}
+            </td>
+          </tr>
+        `;
+      })
+      .join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 24px;
+              color: #222;
+            }
+
+            h1 {
+              text-align: center;
+              margin-bottom: 4px;
+            }
+
+            .date {
+              text-align: center;
+              color: #666;
+              margin-bottom: 24px;
+            }
+
+            .summary {
+              display: flex;
+              justify-content: space-between;
+              margin-bottom: 24px;
+            }
+
+            .summary-card {
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              padding: 12px;
+              width: 48%;
+            }
+
+            .summary-card h3 {
+              margin: 0 0 8px 0;
+            }
+
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 28px;
+            }
+
+            th {
+              background-color: #f2f2f2;
+              text-align: left;
+            }
+
+            th, td {
+              border: 1px solid #ddd;
+              padding: 10px;
+              font-size: 13px;
+            }
+
+            .section-title {
+              margin-top: 24px;
+              margin-bottom: 8px;
+              font-size: 18px;
+              font-weight: bold;
+            }
+
+            .present {
+              color: #0a8f3c;
+              font-weight: bold;
+            }
+
+            .absent {
+              color: #d32f2f;
+              font-weight: bold;
+            }
+
+            .footer {
+              margin-top: 30px;
+              font-size: 12px;
+              color: #777;
+              text-align: center;
+            }
+          </style>
+        </head>
+
+        <body>
+          <h1>Daily Attendance Report</h1>
+          <div class="date">Date: ${date}</div>
+
+          <div class="summary">
+            <div class="summary-card">
+              <h3>Staff Summary</h3>
+              <p>Total Staff: ${totalStaff}</p>
+              <p>Present: ${presentStaff}</p>
+              <p>Absent: ${absentStaff}</p>
+            </div>
+
+            <div class="summary-card">
+              <h3>Instructor Summary</h3>
+              <p>Total Instructors: ${totalInstructors}</p>
+              <p>Present: ${presentInstructors}</p>
+              <p>Absent: ${absentInstructors}</p>
+            </div>
+          </div>
+
+          <div class="section-title">Staff Attendance</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Staff ID</th>
+                <th>Name</th>
+                <th>Position</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                staffRows ||
+                `<tr><td colspan="5" style="text-align:center;">No staff records found</td></tr>`
+              }
+            </tbody>
+          </table>
+
+          <div class="section-title">Instructor Attendance</div>
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>License No</th>
+                <th>Name</th>
+                <th>Contact Number</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${
+                instructorRows ||
+                `<tr><td colspan="5" style="text-align:center;">No instructor records found</td></tr>`
+              }
+            </tbody>
+          </table>
+
+          <div class="footer">
+            Generated by DriveOn Driving School Management System
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+      setGeneratingReport(true);
+
+      const html = generateReportHtml();
+
+      const file = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+
+      if (!canShare) {
+        Alert.alert('Report Generated', `PDF file created: ${file.uri}`);
+        return;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: `Attendance Report - ${formatDate(selectedDate)}`,
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (error) {
+      console.error('Generate report error:', error);
+      Alert.alert('Error', 'Failed to generate attendance report');
+    } finally {
+      setGeneratingReport(false);
+    }
+  };
+
   const renderDatePicker = () => {
     if (!showDatePicker) return null;
 
@@ -178,82 +438,90 @@ const StaffAttendanceScreen = ({ navigation }) => {
   );
 
   const renderStaffTable = () => (
-    <View style={styles.tableCard}>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, styles.idColumn]}>Staff ID</Text>
-        <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
-        <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
-      </View>
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Staff Attendance</Text>
 
-      {staffAttendance.length === 0 ? (
-        <View style={styles.emptyRow}>
-          <Text style={styles.emptyText}>No staff members found</Text>
+      <View style={styles.tableCard}>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, styles.idColumn]}>Staff ID</Text>
+          <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
+          <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
         </View>
-      ) : (
-        staffAttendance.map(item => {
-          const staff = item.staff;
-          const staffId = staff?._id || staff;
 
-          return (
-            <View key={staffId} style={styles.tableRow}>
-              <Text style={[styles.rowText, styles.idColumn]}>
-                {staff?.employeeId || 'N/A'}
-              </Text>
+        {staffAttendance.length === 0 ? (
+          <View style={styles.emptyRow}>
+            <Text style={styles.emptyText}>No staff members found</Text>
+          </View>
+        ) : (
+          staffAttendance.map(item => {
+            const staff = item.staff;
+            const staffId = staff?._id || staff;
 
-              <Text style={[styles.rowText, styles.nameColumn]}>
-                {getPersonName(staff)}
-              </Text>
+            return (
+              <View key={staffId} style={styles.tableRow}>
+                <Text style={[styles.rowText, styles.idColumn]}>
+                  {staff?.employeeId || 'N/A'}
+                </Text>
 
-              <TouchableOpacity
-                style={styles.attendedColumn}
-                onPress={() => toggleStaffAttendance(staffId)}
-              >
-                {renderCheckBox(item.attended)}
-              </TouchableOpacity>
-            </View>
-          );
-        })
-      )}
+                <Text style={[styles.rowText, styles.nameColumn]}>
+                  {getPersonName(staff)}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.attendedColumn}
+                  onPress={() => toggleStaffAttendance(staffId)}
+                >
+                  {renderCheckBox(item.attended)}
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
+      </View>
     </View>
   );
 
   const renderInstructorTable = () => (
-    <View style={styles.tableCard}>
-      <View style={styles.tableHeader}>
-        <Text style={[styles.headerCell, styles.idColumn]}>Instructor ID</Text>
-        <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
-        <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
-      </View>
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Instructor Attendance</Text>
 
-      {instructorAttendance.length === 0 ? (
-        <View style={styles.emptyRow}>
-          <Text style={styles.emptyText}>No instructors found</Text>
+      <View style={styles.tableCard}>
+        <View style={styles.tableHeader}>
+          <Text style={[styles.headerCell, styles.idColumn]}>License No</Text>
+          <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
+          <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
         </View>
-      ) : (
-        instructorAttendance.map(item => {
-          const instructor = item.instructor;
-          const instructorId = instructor?._id || instructor;
 
-          return (
-            <View key={instructorId} style={styles.tableRow}>
-              <Text style={[styles.rowText, styles.idColumn]}>
-                {getInstructorId(instructor)}
-              </Text>
+        {instructorAttendance.length === 0 ? (
+          <View style={styles.emptyRow}>
+            <Text style={styles.emptyText}>No instructors found</Text>
+          </View>
+        ) : (
+          instructorAttendance.map(item => {
+            const instructor = item.instructor;
+            const instructorId = instructor?._id || instructor;
 
-              <Text style={[styles.rowText, styles.nameColumn]}>
-                {getPersonName(instructor)}
-              </Text>
+            return (
+              <View key={instructorId} style={styles.tableRow}>
+                <Text style={[styles.rowText, styles.idColumn]}>
+                  {getInstructorId(instructor)}
+                </Text>
 
-              <TouchableOpacity
-                style={styles.attendedColumn}
-                onPress={() => toggleInstructorAttendance(instructorId)}
-              >
-                {renderCheckBox(item.attended)}
-              </TouchableOpacity>
-            </View>
-          );
-        })
-      )}
+                <Text style={[styles.rowText, styles.nameColumn]}>
+                  {getPersonName(instructor)}
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.attendedColumn}
+                  onPress={() => toggleInstructorAttendance(instructorId)}
+                >
+                  {renderCheckBox(item.attended)}
+                </TouchableOpacity>
+              </View>
+            );
+          })
+        )}
+      </View>
     </View>
   );
 
@@ -273,7 +541,7 @@ const StaffAttendanceScreen = ({ navigation }) => {
             <Ionicons name="arrow-back" size={24} color={COLORS.black} />
           </TouchableOpacity>
 
-          <Text style={styles.title}>Staff Attendance</Text>
+          <Text style={styles.title}>Attendance</Text>
 
           <TouchableOpacity
             style={styles.insightBtn}
@@ -303,9 +571,7 @@ const StaffAttendanceScreen = ({ navigation }) => {
           style={styles.dateBox}
           onPress={() => setShowDatePicker(true)}
         >
-          <Text style={styles.dateText}>
-            {formatDate(selectedDate)}
-          </Text>
+          <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
 
           <Ionicons
             name="calendar-outline"
@@ -321,7 +587,7 @@ const StaffAttendanceScreen = ({ navigation }) => {
         {renderInstructorTable()}
 
         <TouchableOpacity
-          style={[styles.submitButton, saving && styles.submitButtonDisabled]}
+          style={[styles.submitButton, saving && styles.submitButtonPressed]}
           onPress={handleSubmitAttendance}
           disabled={saving}
         >
@@ -331,6 +597,26 @@ const StaffAttendanceScreen = ({ navigation }) => {
             <Text style={styles.submitButtonText}>
               Complete attendance taking
             </Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[
+            styles.reportButton,
+            generatingReport && styles.reportButtonDisabled,
+          ]}
+          onPress={handleGenerateReport}
+          disabled={generatingReport}
+        >
+          {generatingReport ? (
+            <ActivityIndicator color={COLORS.white} size="small" />
+          ) : (
+            <>
+              <Ionicons name="download-outline" size={20} color={COLORS.white} />
+              <Text style={styles.reportButtonText}>
+                Download daily attendance report
+              </Text>
+            </>
           )}
         </TouchableOpacity>
       </ScrollView>
@@ -361,7 +647,7 @@ const styles = StyleSheet.create({
   },
 
   title: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '700',
     color: COLORS.black,
   },
@@ -379,8 +665,8 @@ const styles = StyleSheet.create({
   },
 
   content: {
-    paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingHorizontal: 20,
+    paddingTop: 28,
     paddingBottom: 40,
   },
 
@@ -409,27 +695,37 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 
+  section: {
+    marginBottom: 24,
+  },
+
+  sectionTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 10,
+  },
+
   tableCard: {
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 14,
     overflow: 'hidden',
-    marginBottom: 28,
     backgroundColor: COLORS.white,
   },
 
   tableHeader: {
     flexDirection: 'row',
     backgroundColor: COLORS.gray,
-    paddingVertical: 18,
+    paddingVertical: 16,
     paddingHorizontal: 12,
     alignItems: 'center',
   },
 
   tableRow: {
     flexDirection: 'row',
-    minHeight: 68,
-    paddingVertical: 14,
+    minHeight: 64,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     alignItems: 'center',
     borderTopWidth: 1,
@@ -437,7 +733,7 @@ const styles = StyleSheet.create({
   },
 
   headerCell: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     color: COLORS.black,
   },
@@ -448,11 +744,11 @@ const styles = StyleSheet.create({
   },
 
   idColumn: {
-    flex: 1.25,
+    flex: 1.2,
   },
 
   nameColumn: {
-    flex: 1.45,
+    flex: 1.5,
   },
 
   attendedColumn: {
@@ -488,19 +784,43 @@ const styles = StyleSheet.create({
   },
 
   submitButton: {
-    backgroundColor: COLORS.darkGray || '#777',
+    backgroundColor: COLORS.blue || '#2563EB',
     borderRadius: 10,
     paddingVertical: 16,
     alignItems: 'center',
     marginHorizontal: 8,
+    marginTop: 4,
   },
 
-  submitButtonDisabled: {
-    opacity: 0.7,
+  submitButtonPressed: {
+    backgroundColor: '#1D4ED8',
+    opacity: 0.9,
   },
 
   submitButtonText: {
-    fontSize: 18,
+    fontSize: 17,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
+
+  reportButton: {
+    backgroundColor: COLORS.green || '#16A34A',
+    borderRadius: 10,
+    paddingVertical: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 8,
+    marginTop: 14,
+    flexDirection: 'row',
+    gap: 8,
+  },
+
+  reportButtonDisabled: {
+    opacity: 0.7,
+  },
+
+  reportButtonText: {
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.white,
   },
