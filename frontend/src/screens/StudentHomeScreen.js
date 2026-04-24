@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Switch,
+  StyleSheet, ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
-import { getStudentById, toggleReminders } from '../services/studentApi';
+import { getStudentById } from '../services/studentApi';
 import { COLORS } from '../theme';
 
 export default function StudentHomeScreen({ navigation, route }) {
@@ -32,13 +32,6 @@ export default function StudentHomeScreen({ navigation, route }) {
     if (studentId) fetchStudent();
     else setLoading(false);
   }, [studentId]);
-
-  const handleToggleReminders = async () => {
-    try {
-      await toggleReminders(studentId);
-      setStudent(prev => ({ ...prev, reminderNotifications: !prev.reminderNotifications }));
-    } catch {}
-  };
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
@@ -162,21 +155,6 @@ export default function StudentHomeScreen({ navigation, route }) {
             </View>
           ))}
         </View>
-
-        {!isAdminView && (
-          <View style={styles.reminderCard}>
-            <View style={styles.flex1}>
-              <Text style={styles.reminderTitle}>Session Reminders</Text>
-              <Text style={styles.reminderSub}>Get notified before your sessions</Text>
-            </View>
-            <Switch
-              value={student?.reminderNotifications || false}
-              onValueChange={handleToggleReminders}
-              trackColor={{ false: COLORS.borderLight, true: COLORS.brandOrange }}
-              thumbColor={COLORS.white}
-            />
-          </View>
-        )}
 
         {[
           {
@@ -376,18 +354,6 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: 22, fontWeight: '800', color: COLORS.black },
   statLabel: { fontSize: 10, color: COLORS.textMuted, textAlign: 'center' },
-  reminderCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    borderRadius: 14,
-    padding: 16,
-    marginBottom: 24,
-  },
-  reminderTitle: { fontSize: 14, fontWeight: '600', color: COLORS.black },
-  reminderSub: { fontSize: 12, color: COLORS.textMuted },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.black, marginBottom: 12 },
   groupBlock: { marginBottom: 20 },
   groupHeader: {

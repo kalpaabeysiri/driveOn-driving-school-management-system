@@ -6,55 +6,296 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
+
 import { getSessions, createPayment } from '../../services/api';
-import { getAllStudents } from '../../services/studentApi';
-import { BASE_URL } from '../../services/api';
+import { getAllStudents, getStudentById } from '../../services/studentApi';
+import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../theme';
 
-const METHODS = ['Cash', 'Card', 'Bank Transfer'];
+const ADMIN_METHODS = ['Cash', 'Card', 'Bank Transfer'];
 
-export default function AddPaymentScreen({ navigation }) {
-  const [sessions,   setSessions]   = useState([]);
-  const [students,   setStudents]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
+export default function AddPaymentScreen({ navigation, route }) {
+  const { user } = useAuth();
+
+  const isStudentEnd =
+    route?.params?.isStudentEnd === true ||
+    route?.params?.isStudentView === true ||
+    user?.role === 'student';
+
+  const loggedStudentId =
+    route?.params?.studentId ||
+    user?._id ||
+    user?.id ||
+    user?.studentId;
+
+  const [sessions, setSessions] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [student, setStudent] = useState(null);
+
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  const [amount,    setAmount]    = useState('');
-  const [method,    setMethod]    = useState('Cash');
+  const [amount, setAmount] = useState('');
+  const [method, setMethod] = useState(isStudentEnd ? 'Bank Transfer' : 'Cash');
   const [sessionId, setSessionId] = useState('');
   const [studentId, setStudentId] = useState('');
   const [reference, setReference] = useState('');
-  const [receipt,   setReceipt]   = useState(null);
+  const [receipt, setReceipt] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [sessRes, stuRes] = await Promise.all([
-          getSessions(),
-          getAllStudents(),
-        ]);
-        setSessions(sessRes.data.filter(s => s.status === 'Scheduled' || s.status === 'Completed'));
-        setStudents(stuRes.data);
-      } catch {
-        console.log('Could not load data');
+        if (isStudentEnd) {
+          const studentRes = await getStudentById(loggedStudentId);
+          const studentData = studentRes.data;
+
+          setStudent(studentData);
+          setStudentId(studentData?._id || loggedStudentId);
+          setMethod('Bank Transfer');
+        } else {
+          const [sessRes, stuRes] = await Promise.all([
+            getSessions(),
+            getAllStudents(),
+          ]);
+
+          setSessions(
+            sessRes.data.filter(
+              s => s.status === 'Scheduled' || s.status === 'Completed'
+            )
+          );
+
+          setStudents(stuRes.data || []);
+        }
+      } catch (error) {
+        console.log('Could not load data:', error.message);
+        Alert.alert('Error', 'Could not load payment details');
       } finally {
         setLoading(false);
       }
     };
+
     fetchData();
-  }, []);
+  }, [isStudentEnd, loggedStudentId]);
 
   const pickReceipt = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
     if (status !== 'granted') {
-      return Alert.alert('Permission needed', 'Please allow access to your photo library');
+      return Alert.alert(
+        'Permission needed',
+        'Please allow access to your photo library'
+      );
     }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
     });
+
     if (!result.canceled) {
       setReceipt(result.assets[0]);
+    }
+  };
+
+  const generateReceiptHtml = () => {
+    const today = new Date().toLocaleString();
+
+    const studentName = student
+      ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
+      : students.find(s => s._id === studentId)
+        ? `${students.find(s => s._id === studentId)?.firstName || ''} ${students.find(s => s._id === studentId)?.lastName || ''}`.trim()
+        : 'N/A';
+
+    const studentEmail = student
+      ? student.email
+      : students.find(s => s._id === studentId)?.email || 'N/A';
+
+    const studentNIC = student
+      ? student.NIC
+      : students.find(s => s._id === studentId)?.NIC || 'N/A';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8" />
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              padding: 28px;
+              color: #222;
+            }
+
+            .header {
+              text-align: center;
+              border-bottom: 2px solid #333;
+              padding-bottom: 14px;
+              margin-bottom: 24px;
+            }
+
+            .brand {
+              font-size: 28px;
+              font-weight: bold;
+              margin-bottom: 4px;
+            }
+
+            .title {
+              font-size: 20px;
+              font-weight: bold;
+              margin-top: 20px;
+              margin-bottom: 18px;
+              text-align: center;
+            }
+
+            .section {
+              border: 1px solid #ddd;
+              border-radius: 8px;
+              padding: 14px;
+              margin-bottom: 16px;
+            }
+
+            .section-title {
+              font-size: 16px;
+              font-weight: bold;
+              margin-bottom: 10px;
+            }
+
+            .row {
+              display: flex;
+              justify-content: space-between;
+              padding: 6px 0;
+              border-bottom: 1px solid #f1f1f1;
+            }
+
+            .label {
+              font-weight: bold;
+              color: #555;
+            }
+
+            .value {
+              color: #111;
+            }
+
+            .amount {
+              font-size: 20px;
+              font-weight: bold;
+              color: #0f62fe;
+            }
+
+            .note {
+              background: #f7f7f7;
+              padding: 12px;
+              border-radius: 8px;
+              font-size: 13px;
+              line-height: 20px;
+            }
+
+            .footer {
+              margin-top: 32px;
+              text-align: center;
+              font-size: 12px;
+              color: #777;
+            }
+          </style>
+        </head>
+
+        <body>
+          <div class="header">
+            <div class="brand">DriveOn Driving School</div>
+            <div>Bank Transfer Payment Receipt</div>
+          </div>
+
+          <div class="title">Transaction Receipt</div>
+
+          <div class="section">
+            <div class="section-title">Student Details</div>
+
+            <div class="row">
+              <span class="label">Student Name</span>
+              <span class="value">${studentName || 'N/A'}</span>
+            </div>
+
+            <div class="row">
+              <span class="label">Email</span>
+              <span class="value">${studentEmail || 'N/A'}</span>
+            </div>
+
+            <div class="row">
+              <span class="label">NIC</span>
+              <span class="value">${studentNIC || 'N/A'}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Payment Details</div>
+
+            <div class="row">
+              <span class="label">Amount</span>
+              <span class="value amount">LKR ${Number(amount || 0).toLocaleString()}</span>
+            </div>
+
+            <div class="row">
+              <span class="label">Payment Method</span>
+              <span class="value">${method}</span>
+            </div>
+
+            <div class="row">
+              <span class="label">Transaction ID</span>
+              <span class="value">${reference || 'N/A'}</span>
+            </div>
+
+            <div class="row">
+              <span class="label">Submitted Date</span>
+              <span class="value">${today}</span>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section-title">Bank Account Details</div>
+
+            <div class="note">
+              Account Name: DriveOn Driving School<br/>
+              Bank: Bank of Ceylon<br/>
+              Branch: Colombo<br/>
+              Account No: 1234567890<br/>
+              Reference: Student NIC / Name
+            </div>
+          </div>
+
+          <div class="footer">
+            This is a system-generated transaction receipt.
+          </div>
+        </body>
+      </html>
+    `;
+  };
+
+  const handleSaveReceiptPdf = async () => {
+    try {
+      const html = generateReceiptHtml();
+
+      const file = await Print.printToFileAsync({
+        html,
+        base64: false,
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+
+      if (!canShare) {
+        Alert.alert('Receipt Generated', `PDF file created: ${file.uri}`);
+        return;
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Save Transaction Receipt',
+        UTI: 'com.adobe.pdf',
+      });
+    } catch (error) {
+      console.log('Receipt PDF error:', error);
+      Alert.alert('Error', 'Could not generate transaction receipt PDF');
     }
   };
 
@@ -62,38 +303,92 @@ export default function AddPaymentScreen({ navigation }) {
     if (!amount || !method) {
       return Alert.alert('Error', 'Amount and payment method are required');
     }
+
     if (isNaN(Number(amount)) || Number(amount) <= 0) {
       return Alert.alert('Error', 'Please enter a valid amount');
     }
 
+    if (!isStudentEnd && !studentId) {
+      return Alert.alert('Error', 'Please select a student');
+    }
+
+    if (isStudentEnd && !studentId) {
+      return Alert.alert('Error', 'Student details could not be loaded');
+    }
+
+    if (isStudentEnd && !reference.trim()) {
+      return Alert.alert('Error', 'Transaction ID is required');
+    }
+
     try {
       setSubmitting(true);
+
       const formData = new FormData();
+
       formData.append('amount', amount);
       formData.append('method', method);
-      if (studentId)  formData.append('studentId', studentId);
-      if (sessionId)  formData.append('session', sessionId);
-      if (reference)  formData.append('reference', reference);
+      formData.append('studentId', studentId);
+
+      if (!isStudentEnd && sessionId) {
+        formData.append('session', sessionId);
+      }
+
+      if (reference.trim()) {
+        formData.append('reference', reference.trim());
+      }
+
       if (receipt) {
         formData.append('receipt', {
-          uri:  receipt.uri,
+          uri: receipt.uri,
           type: 'image/jpeg',
           name: `receipt_${Date.now()}.jpg`,
         });
       }
 
       await createPayment(formData);
-      Alert.alert('Success', 'Payment recorded successfully!', [
-        { text: 'OK', onPress: () => navigation.goBack() },
-      ]);
+
+      if (isStudentEnd) {
+        Alert.alert(
+          'Payment Submitted Successfully',
+          'Your bank transfer payment details were submitted successfully. You can save your transaction receipt as a PDF.',
+          [
+            {
+              text: 'Save Receipt PDF',
+              onPress: handleSaveReceiptPdf,
+            },
+            {
+              text: 'OK',
+              onPress: () => navigation.goBack(),
+            },
+          ]
+        );
+      } else {
+        Alert.alert('Success', 'Payment recorded successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+      }
     } catch (err) {
-      Alert.alert('Error', err.response?.data?.message || 'Could not record payment');
+      Alert.alert(
+        'Error',
+        err.response?.data?.message || 'Could not record payment'
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandOrange} /></View>;
+  const paymentMethods = isStudentEnd ? ['Bank Transfer'] : ADMIN_METHODS;
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={COLORS.brandOrange} />
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -101,13 +396,30 @@ export default function AddPaymentScreen({ navigation }) {
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.black} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Record Payment</Text>
+
+        <Text style={styles.headerTitle}>
+          {isStudentEnd ? 'Pay Course Fee' : 'Record Payment'}
+        </Text>
+
         <View style={{ width: 24 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {isStudentEnd && student && (
+          <View style={styles.studentInfoCard}>
+            <Text style={styles.studentInfoTitle}>Student Details</Text>
+            <Text style={styles.studentInfoName}>
+              {student.firstName} {student.lastName}
+            </Text>
+            <Text style={styles.studentInfoText}>{student.email}</Text>
+            <Text style={styles.studentInfoText}>NIC: {student.NIC}</Text>
+          </View>
+        )}
 
-        {/* Amount */}
         <Text style={styles.label}>Amount (LKR) *</Text>
         <TextInput
           style={styles.input}
@@ -117,104 +429,193 @@ export default function AddPaymentScreen({ navigation }) {
           keyboardType="numeric"
         />
 
-        {/* Method */}
         <Text style={styles.label}>Payment Method *</Text>
         <View style={styles.methodRow}>
-          {METHODS.map((m) => (
+          {paymentMethods.map(m => (
             <TouchableOpacity
               key={m}
               style={[styles.methodBtn, method === m && styles.methodBtnActive]}
               onPress={() => setMethod(m)}
+              disabled={isStudentEnd}
             >
               <Ionicons
-                name={m === 'Card' ? 'card-outline' : m === 'Cash' ? 'cash-outline' : 'business-outline'}
+                name={
+                  m === 'Card'
+                    ? 'card-outline'
+                    : m === 'Cash'
+                    ? 'cash-outline'
+                    : 'business-outline'
+                }
                 size={18}
                 color={method === m ? COLORS.black : COLORS.textMuted}
               />
-              <Text style={[styles.methodText, method === m && styles.methodTextActive]}>{m}</Text>
+
+              <Text
+                style={[
+                  styles.methodText,
+                  method === m && styles.methodTextActive,
+                ]}
+              >
+                {m}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
 
-        {/* Reference */}
-        <Text style={styles.label}>Reference / Transaction ID</Text>
+        {isStudentEnd && (
+          <View style={styles.bankNoteCard}>
+            <View style={styles.bankNoteHeader}>
+              <Ionicons
+                name="information-circle-outline"
+                size={22}
+                color={COLORS.brandOrange}
+              />
+              <Text style={styles.bankNoteTitle}>Bank Transfer Details</Text>
+            </View>
+
+            <Text style={styles.bankNoteText}>
+              You can pay your course fee via bank transfer. Please transfer the
+              amount to the following account and enter your transaction ID below.
+            </Text>
+
+            <View style={styles.accountBox}>
+              <Text style={styles.accountText}>Account Name: DriveOn Driving School</Text>
+              <Text style={styles.accountText}>Bank: Bank of Ceylon</Text>
+              <Text style={styles.accountText}>Branch: Colombo</Text>
+              <Text style={styles.accountText}>Account No: 1234567890</Text>
+              <Text style={styles.accountText}>Reference: Student NIC / Name</Text>
+            </View>
+          </View>
+        )}
+
+        <Text style={styles.label}>
+          {isStudentEnd ? 'Transaction ID *' : 'Reference / Transaction ID'}
+        </Text>
         <TextInput
           style={styles.input}
           placeholder="e.g. TXN123456"
           value={reference}
           onChangeText={setReference}
+          autoCapitalize="characters"
         />
 
-        {/* Student */}
-        <Text style={styles.label}>Student (required for admin) *</Text>
-        {students.length === 0 ? (
-          <Text style={styles.noSessions}>No students found</Text>
-        ) : (
-          students.map((s) => (
-            <TouchableOpacity
-              key={s._id}
-              style={[styles.sessionCard, studentId === s._id && styles.sessionCardActive]}
-              onPress={() => setStudentId(studentId === s._id ? '' : s._id)}
-            >
-              <View style={styles.flex1}>
-                <Text style={styles.sessionType}>{s.firstName} {s.lastName}</Text>
-                <Text style={styles.sessionMeta}>{s.email} · {s.NIC}</Text>
-              </View>
-              {studentId === s._id && (
-                <Ionicons name="checkmark-circle" size={22} color={COLORS.green} />
-              )}
-            </TouchableOpacity>
-          ))
+        {!isStudentEnd && (
+          <>
+            <Text style={styles.label}>Student *</Text>
+
+            {students.length === 0 ? (
+              <Text style={styles.noSessions}>No students found</Text>
+            ) : (
+              students.map(s => (
+                <TouchableOpacity
+                  key={s._id}
+                  style={[
+                    styles.sessionCard,
+                    studentId === s._id && styles.sessionCardActive,
+                  ]}
+                  onPress={() => setStudentId(studentId === s._id ? '' : s._id)}
+                >
+                  <View style={styles.flex1}>
+                    <Text style={styles.sessionType}>
+                      {s.firstName} {s.lastName}
+                    </Text>
+                    <Text style={styles.sessionMeta}>
+                      {s.email} · {s.NIC}
+                    </Text>
+                  </View>
+
+                  {studentId === s._id && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={22}
+                      color={COLORS.green}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))
+            )}
+          </>
         )}
 
-        {/* Link to session */}
-        <Text style={styles.label}>Link to Session (optional)</Text>
-        {sessions.length === 0 ? (
-          <Text style={styles.noSessions}>No scheduled or completed sessions available</Text>
-        ) : (
-          sessions.map((s) => (
-            <TouchableOpacity
-              key={s._id}
-              style={[styles.sessionCard, sessionId === s._id && styles.sessionCardActive]}
-              onPress={() => setSessionId(sessionId === s._id ? '' : s._id)}
-            >
-              <View style={styles.flex1}>
-                <Text style={styles.sessionType}>{s.sessionType} Session</Text>
-                <Text style={styles.sessionMeta}>
-                  {new Date(s.date).toDateString()} · {s.startTime}
-                </Text>
-              </View>
-              {sessionId === s._id && (
-                <Ionicons name="checkmark-circle" size={22} color={COLORS.green} />
-              )}
-            </TouchableOpacity>
-          ))
+        {!isStudentEnd && (
+          <>
+            <Text style={styles.label}>Link to Session (optional)</Text>
+
+            {sessions.length === 0 ? (
+              <Text style={styles.noSessions}>
+                No scheduled or completed sessions available
+              </Text>
+            ) : (
+              sessions.map(s => (
+                <TouchableOpacity
+                  key={s._id}
+                  style={[
+                    styles.sessionCard,
+                    sessionId === s._id && styles.sessionCardActive,
+                  ]}
+                  onPress={() => setSessionId(sessionId === s._id ? '' : s._id)}
+                >
+                  <View style={styles.flex1}>
+                    <Text style={styles.sessionType}>
+                      {s.sessionType || s.type} Session
+                    </Text>
+
+                    <Text style={styles.sessionMeta}>
+                      {new Date(s.date).toDateString()} · {s.startTime}
+                    </Text>
+                  </View>
+
+                  {sessionId === s._id && (
+                    <Ionicons
+                      name="checkmark-circle"
+                      size={22}
+                      color={COLORS.green}
+                    />
+                  )}
+                </TouchableOpacity>
+              ))
+            )}
+          </>
         )}
 
-        {/* Receipt Upload */}
-        <Text style={[styles.label, { marginTop: 8 }]}>Upload Receipt (optional)</Text>
+        <Text style={[styles.label, { marginTop: 8 }]}>
+          Upload Receipt {isStudentEnd ? '*' : '(optional)'}
+        </Text>
+
         <TouchableOpacity style={styles.uploadBtn} onPress={pickReceipt}>
           {receipt ? (
             <Image source={{ uri: receipt.uri }} style={styles.receiptPreview} />
           ) : (
             <>
-              <Ionicons name="cloud-upload-outline" size={28} color={COLORS.textMuted} />
+              <Ionicons
+                name="cloud-upload-outline"
+                size={28}
+                color={COLORS.textMuted}
+              />
               <Text style={styles.uploadText}>Tap to upload receipt image</Text>
               <Text style={styles.uploadSubtext}>JPG, PNG up to 5MB</Text>
             </>
           )}
         </TouchableOpacity>
+
         {receipt && (
           <TouchableOpacity onPress={() => setReceipt(null)}>
             <Text style={styles.removeText}>Remove image</Text>
           </TouchableOpacity>
         )}
 
-        <TouchableOpacity style={styles.submitBtn} onPress={handleSubmit} disabled={submitting}>
-          {submitting
-            ? <ActivityIndicator color={COLORS.white} />
-            : <Text style={styles.submitBtnText}>Record Payment</Text>
-          }
+        <TouchableOpacity
+          style={[styles.submitBtn, submitting && styles.submitBtnDisabled]}
+          onPress={handleSubmit}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color={COLORS.white} />
+          ) : (
+            <Text style={styles.submitBtnText}>
+              {isStudentEnd ? 'Submit Bank Transfer Payment' : 'Record Payment'}
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -222,8 +623,17 @@ export default function AddPaymentScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  safe:   { flex: 1, backgroundColor: COLORS.white },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  safe: {
+    flex: 1,
+    backgroundColor: COLORS.white,
+  },
+
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
   header: {
     backgroundColor: COLORS.gray,
     paddingTop: 52,
@@ -235,9 +645,25 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 24,
     borderBottomRightRadius: 24,
   },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: COLORS.black },
-  content:     { padding: 20, paddingBottom: 40 },
-  label:       { fontSize: 13, fontWeight: '600', color: COLORS.textDark, marginBottom: 8 },
+
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+
+  content: {
+    padding: 20,
+    paddingBottom: 40,
+  },
+
+  label: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.textDark,
+    marginBottom: 8,
+  },
+
   input: {
     backgroundColor: COLORS.bgLight,
     borderWidth: 1,
@@ -248,47 +674,206 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 16,
   },
-  methodRow:       { flexDirection: 'row', gap: 10, marginBottom: 16 },
-  methodBtn:       { flex: 1, borderRadius: 12, paddingVertical: 12, alignItems: 'center', gap: 4, backgroundColor: COLORS.bgLight, borderWidth: 1, borderColor: COLORS.border },
-  methodBtnActive: { backgroundColor: COLORS.brandYellow, borderColor: COLORS.brandYellow },
-  methodText:      { fontSize: 12, fontWeight: '600', color: COLORS.textMuted },
-  methodTextActive:{ color: COLORS.black },
-  noSessions:      { fontSize: 13, color: COLORS.textMuted, marginBottom: 16 },
-  sessionCard: {
+
+  methodRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    gap: 10,
+    marginBottom: 16,
+  },
+
+  methodBtn: {
+    flex: 1,
+    backgroundColor: COLORS.bgLight,
     borderWidth: 1,
     borderColor: COLORS.border,
     borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+
+  methodBtnActive: {
+    backgroundColor: COLORS.brandYellow,
+    borderColor: COLORS.brandOrange,
+  },
+
+  methodText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
+
+  methodTextActive: {
+    color: COLORS.black,
+    fontWeight: '700',
+  },
+
+  studentInfoCard: {
+    backgroundColor: COLORS.brandYellow,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 18,
+  },
+
+  studentInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginBottom: 4,
+  },
+
+  studentInfoName: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.black,
+  },
+
+  studentInfoText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  bankNoteCard: {
+    backgroundColor: COLORS.bgLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+  },
+
+  bankNoteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+
+  bankNoteTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+
+  bankNoteText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 19,
+    marginBottom: 10,
+  },
+
+  accountBox: {
+    backgroundColor: COLORS.white,
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+
+  accountText: {
+    fontSize: 13,
+    color: COLORS.black,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+
+  sessionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 14,
     padding: 14,
     marginBottom: 10,
   },
-  sessionCardActive: { borderColor: COLORS.brandOrange, backgroundColor: '#FFF8ED' },
-  flex1:         { flex: 1 },
-  sessionType:   { fontSize: 14, fontWeight: '600', color: COLORS.black },
-  sessionMeta:   { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+
+  sessionCardActive: {
+    borderColor: COLORS.green,
+    backgroundColor: COLORS.greenBg,
+  },
+
+  flex1: {
+    flex: 1,
+  },
+
+  sessionType: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+
+  sessionMeta: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  noSessions: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 16,
+  },
+
   uploadBtn: {
-    borderWidth: 2,
-    borderColor: COLORS.border,
+    backgroundColor: COLORS.bgLight,
+    borderWidth: 1,
     borderStyle: 'dashed',
+    borderColor: COLORS.border,
     borderRadius: 14,
-    padding: 24,
+    minHeight: 140,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    padding: 16,
     marginBottom: 8,
-    minHeight: 120,
   },
-  uploadText:     { fontSize: 14, fontWeight: '500', color: COLORS.textMuted },
-  uploadSubtext:  { fontSize: 12, color: COLORS.borderLight },
-  receiptPreview: { width: '100%', height: 180, borderRadius: 10, resizeMode: 'cover' },
-  removeText:     { color: COLORS.red, fontSize: 13, fontWeight: '600', textAlign: 'center', marginBottom: 16 },
+
+  uploadText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.black,
+    marginTop: 8,
+  },
+
+  uploadSubtext: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  receiptPreview: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    resizeMode: 'cover',
+  },
+
+  removeText: {
+    fontSize: 13,
+    color: COLORS.red,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+
   submitBtn: {
     backgroundColor: COLORS.brandOrange,
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 14,
   },
-  submitBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
+
+  submitBtnDisabled: {
+    opacity: 0.7,
+  },
+
+  submitBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.white,
+  },
 });
