@@ -32,7 +32,7 @@ const createPayment = async (req, res) => {
       - Student can only pay for themselves.
 
       Admin/staff side:
-      - Admin or staff must select a student.
+      - Admin/staff must select a student.
       - The selected studentId will be used as the payment owner.
     */
     const payingStudent = isStudentUser ? loggedUserId : studentId;
@@ -43,7 +43,6 @@ const createPayment = async (req, res) => {
       });
     }
 
-    // Bank transfer must have transaction ID.
     if (method === 'Bank Transfer' && !reference) {
       return res.status(400).json({
         message: 'Transaction ID is required for bank transfer payments',
@@ -52,10 +51,6 @@ const createPayment = async (req, res) => {
 
     const receipt = req.file ? `/uploads/${req.file.filename}` : null;
 
-    /*
-      Cash payments are completed immediately.
-      Bank transfers are pending until admin accepts them.
-    */
     const paymentStatus = method === 'Bank Transfer' ? 'Pending' : 'Completed';
 
     const payment = await Payment.create({
@@ -69,12 +64,19 @@ const createPayment = async (req, res) => {
       paidAt: paymentStatus === 'Completed' ? new Date() : undefined,
     });
 
+    const populatedPayment = await Payment.findById(payment._id)
+      .populate(
+        'student',
+        'name firstName lastName email NIC contactNumber phone mobile'
+      )
+      .populate('session', 'type sessionType date startTime');
+
     res.status(201).json({
       message:
         method === 'Bank Transfer'
           ? 'Bank transfer payment submitted successfully. Waiting for admin verification.'
           : 'Payment recorded successfully.',
-      payment,
+      payment: populatedPayment,
     });
   } catch (error) {
     console.error('Create payment error:', error);
@@ -95,7 +97,10 @@ const getPayments = async (req, res) => {
     const filter = isStudentUser ? { student: loggedUserId } : {};
 
     const payments = await Payment.find(filter)
-      .populate('student', 'name firstName lastName email NIC')
+      .populate(
+        'student',
+        'name firstName lastName email NIC contactNumber phone mobile'
+      )
       .populate('session', 'type sessionType date startTime')
       .sort({ createdAt: -1 });
 
@@ -117,7 +122,10 @@ const getPaymentById = async (req, res) => {
     const isStudentUser = req.user.role === 'student';
 
     const payment = await Payment.findById(req.params.id)
-      .populate('student', 'name firstName lastName email NIC')
+      .populate(
+        'student',
+        'name firstName lastName email NIC contactNumber phone mobile'
+      )
       .populate('session', 'type sessionType date startTime');
 
     if (!payment) {
@@ -214,7 +222,10 @@ const updatePayment = async (req, res) => {
     await payment.save();
 
     const updatedPayment = await Payment.findById(payment._id)
-      .populate('student', 'name firstName lastName email NIC')
+      .populate(
+        'student',
+        'name firstName lastName email NIC contactNumber phone mobile'
+      )
       .populate('session', 'type sessionType date startTime');
 
     res.json({

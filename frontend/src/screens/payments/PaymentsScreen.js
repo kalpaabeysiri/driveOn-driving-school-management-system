@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import {
@@ -21,6 +22,7 @@ import {
   BASE_URL,
 } from '../../services/api';
 
+import { getStudentById } from '../../services/studentApi';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../theme';
 
@@ -40,16 +42,19 @@ export default function PaymentsScreen({ navigation }) {
   const [loading, setLoading] = useState(true);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
 
-  const isAdmin = user?.role === 'admin';
+  const isStudentEnd = user?.role === 'student';
+  const canManagePayments = !isStudentEnd;
 
   const fetchPayments = useCallback(async () => {
     try {
       const { data } = await getPayments();
-      setPayments(data);
+      setPayments(data || []);
     } catch (error) {
+      console.log('Load payments error:', error.response?.data || error.message);
       Alert.alert('Error', 'Could not load payments');
     } finally {
       setLoading(false);
@@ -61,17 +66,57 @@ export default function PaymentsScreen({ navigation }) {
     fetchPayments();
   }, [fetchPayments]);
 
+  useFocusEffect(
+    useCallback(() => {
+      fetchPayments();
+    }, [fetchPayments])
+  );
+
   const total = payments
     .filter(p => p.status === 'Completed')
-    .reduce((sum, p) => sum + p.amount, 0);
+    .reduce((sum, p) => sum + Number(p.amount || 0), 0);
+
+  const getStudentId = student => {
+    if (!student) return null;
+    if (typeof student === 'string') return student;
+    return student._id || student.id || null;
+  };
+
+  const hasUsefulStudentDetails = student => {
+    if (!student || typeof student === 'string') return false;
+
+    return Boolean(
+      student.name ||
+      student.firstName ||
+      student.lastName ||
+      student.email ||
+      student.NIC ||
+      student.contactNumber
+    );
+  };
 
   const getStudentName = student => {
-    if (!student) return 'N/A';
+    if (!student || typeof student === 'string') return 'N/A';
 
     if (student.name) return student.name;
 
     const fullName = `${student.firstName || ''} ${student.lastName || ''}`.trim();
     return fullName || 'N/A';
+  };
+
+  const getStudentEmail = student => {
+    if (!student || typeof student === 'string') return 'N/A';
+    return student.email || 'N/A';
+  };
+
+  const getStudentNIC = student => {
+    if (!student || typeof student === 'string') return 'N/A';
+    return student.NIC || 'N/A';
+  };
+
+  const getStudentContact = student => {
+    if (!student || typeof student === 'string') return 'N/A';
+    return student.contactNumber || student.phone || student.mobile || 'N/A';
   };
 
   const getReceiptUrl = receipt => {
@@ -84,14 +129,41 @@ export default function PaymentsScreen({ navigation }) {
     return `${BASE_URL}${receipt}`;
   };
 
+  const loadFullStudentDetails = async paymentData => {
+    try {
+      const studentId = getStudentId(paymentData?.student);
+
+      if (!studentId) {
+        return paymentData;
+      }
+
+      if (hasUsefulStudentDetails(paymentData.student)) {
+        return paymentData;
+      }
+
+      const { data } = await getStudentById(studentId);
+
+      return {
+        ...paymentData,
+        student: data,
+      };
+    } catch (error) {
+      console.log('Load student details error:', error.response?.data || error.message);
+      return paymentData;
+    }
+  };
+
   const openPaymentDetails = async paymentId => {
     try {
       setDetailsLoading(true);
       setShowDetailsModal(true);
 
       const { data } = await getPaymentById(paymentId);
-      setSelectedPayment(data);
+      const paymentWithStudent = await loadFullStudentDetails(data);
+
+      setSelectedPayment(paymentWithStudent);
     } catch (error) {
+      console.log('Load payment details error:', error.response?.data || error.message);
       setShowDetailsModal(false);
       Alert.alert('Error', 'Could not load payment details');
     } finally {
@@ -130,6 +202,8 @@ export default function PaymentsScreen({ navigation }) {
               closePaymentDetails();
               fetchPayments();
             } catch (error) {
+              console.log('Accept payment error:', error.response?.data || error.message);
+
               Alert.alert(
                 'Error',
                 error.response?.data?.message || 'Could not accept payment'
@@ -143,10 +217,52 @@ export default function PaymentsScreen({ navigation }) {
     );
   };
 
+  const handleRejectPayment = async () => {
+    if (!selectedPayment?._id) return;
+
+    Alert.alert(
+      'Reject Payment',
+      'Are you sure you want to reject this bank transfer payment?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Reject',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setRejecting(true);
+
+              await updatePayment(selectedPayment._id, {
+                status: 'Failed',
+              });
+
+              Alert.alert('Success', 'Payment rejected successfully');
+
+              closePaymentDetails();
+              fetchPayments();
+            } catch (error) {
+              console.log('Reject payment error:', error.response?.data || error.message);
+
+              Alert.alert(
+                'Error',
+                error.response?.data?.message || 'Could not reject payment'
+              );
+            } finally {
+              setRejecting(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderPaymentIcon = method => {
-    if (method === 'Card') return 'card-outline';
     if (method === 'Cash') return 'cash-outline';
-    return 'business-outline';
+    if (method === 'Bank Transfer') return 'business-outline';
+    return 'card-outline';
   };
 
   const renderPaymentCard = p => {
@@ -174,15 +290,14 @@ export default function PaymentsScreen({ navigation }) {
           <Text style={styles.paymentMethod}>{p.method} Payment</Text>
 
           <Text style={styles.paymentMeta}>
-            {new Date(p.createdAt).toLocaleDateString()}
-            {p.session ? ` · ${p.session.type || p.session.sessionType} Session` : ''}
+            {p.createdAt ? new Date(p.createdAt).toLocaleDateString() : 'N/A'}
           </Text>
 
           {p.reference && (
             <Text style={styles.paymentRef}>Ref: {p.reference}</Text>
           )}
 
-          {p.student && isAdmin && (
+          {p.student && canManagePayments && (
             <Text style={styles.paymentRef}>
               Student: {getStudentName(p.student)}
             </Text>
@@ -206,6 +321,7 @@ export default function PaymentsScreen({ navigation }) {
 
   const renderDetailsModal = () => {
     const payment = selectedPayment;
+
     const colors = statusColor[payment?.status] || {
       bg: COLORS.gray,
       text: COLORS.textMuted,
@@ -213,8 +329,8 @@ export default function PaymentsScreen({ navigation }) {
 
     const receiptUrl = getReceiptUrl(payment?.receipt);
 
-    const canAcceptBankTransfer =
-      isAdmin &&
+    const canTakeAction =
+      canManagePayments &&
       payment?.method === 'Bank Transfer' &&
       payment?.status === 'Pending';
 
@@ -238,6 +354,7 @@ export default function PaymentsScreen({ navigation }) {
             {detailsLoading ? (
               <View style={styles.detailsLoadingBox}>
                 <ActivityIndicator size="large" color={COLORS.brandOrange} />
+                <Text style={styles.loadingText}>Loading payment details...</Text>
               </View>
             ) : payment ? (
               <ScrollView showsVerticalScrollIndicator={false}>
@@ -269,10 +386,12 @@ export default function PaymentsScreen({ navigation }) {
                     <Text style={styles.detailValue}>{payment.method}</Text>
                   </View>
 
-                  <View style={styles.detailRow}>
-                    <Text style={styles.detailLabel}>Transaction ID</Text>
-                    <Text style={styles.detailValue}>{payment.reference || 'N/A'}</Text>
-                  </View>
+                  {payment.method === 'Bank Transfer' && (
+                    <View style={styles.detailRow}>
+                      <Text style={styles.detailLabel}>Transaction ID</Text>
+                      <Text style={styles.detailValue}>{payment.reference || 'N/A'}</Text>
+                    </View>
+                  )}
 
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Submitted Date</Text>
@@ -296,6 +415,24 @@ export default function PaymentsScreen({ navigation }) {
                 <View style={styles.detailSection}>
                   <Text style={styles.detailSectionTitle}>Student Details</Text>
 
+                  <View style={styles.studentHeaderBox}>
+                    <View style={styles.studentAvatar}>
+                      <Text style={styles.studentAvatarText}>
+                        {getStudentName(payment.student).charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+
+                    <View style={styles.flex1}>
+                      <Text style={styles.studentNameText}>
+                        {getStudentName(payment.student)}
+                      </Text>
+
+                      <Text style={styles.studentSubText}>
+                        {getStudentEmail(payment.student)}
+                      </Text>
+                    </View>
+                  </View>
+
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Name</Text>
                     <Text style={styles.detailValue}>
@@ -306,46 +443,24 @@ export default function PaymentsScreen({ navigation }) {
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>Email</Text>
                     <Text style={styles.detailValue}>
-                      {payment.student?.email || 'N/A'}
+                      {getStudentEmail(payment.student)}
                     </Text>
                   </View>
 
                   <View style={styles.detailRow}>
                     <Text style={styles.detailLabel}>NIC</Text>
                     <Text style={styles.detailValue}>
-                      {payment.student?.NIC || 'N/A'}
+                      {getStudentNIC(payment.student)}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailRow}>
+                    <Text style={styles.detailLabel}>Contact</Text>
+                    <Text style={styles.detailValue}>
+                      {getStudentContact(payment.student)}
                     </Text>
                   </View>
                 </View>
-
-                {payment.session && (
-                  <View style={styles.detailSection}>
-                    <Text style={styles.detailSectionTitle}>Session Details</Text>
-
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Session</Text>
-                      <Text style={styles.detailValue}>
-                        {payment.session.type || payment.session.sessionType || 'N/A'}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Date</Text>
-                      <Text style={styles.detailValue}>
-                        {payment.session.date
-                          ? new Date(payment.session.date).toDateString()
-                          : 'N/A'}
-                      </Text>
-                    </View>
-
-                    <View style={styles.detailRow}>
-                      <Text style={styles.detailLabel}>Start Time</Text>
-                      <Text style={styles.detailValue}>
-                        {payment.session.startTime || 'N/A'}
-                      </Text>
-                    </View>
-                  </View>
-                )}
 
                 {payment.method === 'Bank Transfer' && (
                   <View style={styles.detailSection}>
@@ -370,25 +485,52 @@ export default function PaymentsScreen({ navigation }) {
                   </View>
                 )}
 
-                {canAcceptBankTransfer && (
-                  <TouchableOpacity
-                    style={[styles.acceptBtn, accepting && styles.acceptBtnDisabled]}
-                    onPress={handleAcceptPayment}
-                    disabled={accepting}
-                  >
-                    {accepting ? (
-                      <ActivityIndicator color={COLORS.white} />
-                    ) : (
-                      <>
-                        <Ionicons
-                          name="checkmark-circle-outline"
-                          size={20}
-                          color={COLORS.white}
-                        />
-                        <Text style={styles.acceptBtnText}>Accept Payment</Text>
-                      </>
-                    )}
-                  </TouchableOpacity>
+                {canTakeAction && (
+                  <View style={styles.paymentActionRow}>
+                    <TouchableOpacity
+                      style={[
+                        styles.rejectBtn,
+                        (rejecting || accepting) && styles.actionBtnDisabled,
+                      ]}
+                      onPress={handleRejectPayment}
+                      disabled={rejecting || accepting}
+                    >
+                      {rejecting ? (
+                        <ActivityIndicator color={COLORS.white} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="close-circle-outline"
+                            size={20}
+                            color={COLORS.white}
+                          />
+                          <Text style={styles.actionBtnText}>Reject</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.acceptBtn,
+                        (accepting || rejecting) && styles.actionBtnDisabled,
+                      ]}
+                      onPress={handleAcceptPayment}
+                      disabled={accepting || rejecting}
+                    >
+                      {accepting ? (
+                        <ActivityIndicator color={COLORS.white} />
+                      ) : (
+                        <>
+                          <Ionicons
+                            name="checkmark-circle-outline"
+                            size={20}
+                            color={COLORS.white}
+                          />
+                          <Text style={styles.actionBtnText}>Accept</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
                 )}
 
                 {payment.method === 'Bank Transfer' &&
@@ -401,6 +543,20 @@ export default function PaymentsScreen({ navigation }) {
                       />
                       <Text style={styles.completedNoticeText}>
                         This bank transfer payment has been accepted.
+                      </Text>
+                    </View>
+                  )}
+
+                {payment.method === 'Bank Transfer' &&
+                  payment.status === 'Failed' && (
+                    <View style={styles.rejectedNotice}>
+                      <Ionicons
+                        name="close-circle"
+                        size={20}
+                        color={COLORS.red}
+                      />
+                      <Text style={styles.rejectedNoticeText}>
+                        This bank transfer payment has been rejected.
                       </Text>
                     </View>
                   )}
@@ -437,7 +593,7 @@ export default function PaymentsScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => navigation.navigate('AddPayment', { onBack: fetchPayments })}
+          onPress={() => navigation.navigate('AddPayment')}
         >
           <Ionicons name="add" size={22} color={COLORS.black} />
         </TouchableOpacity>
@@ -456,10 +612,14 @@ export default function PaymentsScreen({ navigation }) {
         }
       >
         <View style={styles.summaryCard}>
-          <Text style={styles.summaryLabel}>Total Paid</Text>
+          <Text style={styles.summaryLabel}>
+            {isStudentEnd ? 'My Total Paid' : 'Total Paid'}
+          </Text>
+
           <Text style={styles.summaryAmount}>
             LKR {total.toLocaleString()}
           </Text>
+
           <Text style={styles.summaryMeta}>
             {payments.filter(p => p.status === 'Completed').length} completed payments
           </Text>
@@ -476,7 +636,9 @@ export default function PaymentsScreen({ navigation }) {
               style={styles.addPaymentBtn}
               onPress={() => navigation.navigate('AddPayment')}
             >
-              <Text style={styles.addPaymentBtnText}>Make a Payment</Text>
+              <Text style={styles.addPaymentBtnText}>
+                {isStudentEnd ? 'Make a Payment' : 'Add Cash Payment'}
+              </Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -499,6 +661,12 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: COLORS.textMuted,
   },
 
   header: {
@@ -733,6 +901,43 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
 
+  studentHeaderBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.bgLight,
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+  },
+
+  studentAvatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.brandYellow,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  studentAvatarText: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.black,
+  },
+
+  studentNameText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: COLORS.black,
+  },
+
+  studentSubText: {
+    fontSize: 12,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -780,7 +985,26 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
   },
 
+  paymentActionRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+    marginBottom: 14,
+  },
+
+  rejectBtn: {
+    flex: 1,
+    backgroundColor: COLORS.red,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+
   acceptBtn: {
+    flex: 1,
     backgroundColor: COLORS.green,
     borderRadius: 12,
     paddingVertical: 14,
@@ -788,15 +1012,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 8,
-    marginTop: 4,
-    marginBottom: 14,
   },
 
-  acceptBtnDisabled: {
+  actionBtnDisabled: {
     opacity: 0.7,
   },
 
-  acceptBtnText: {
+  actionBtnText: {
     fontSize: 15,
     fontWeight: '700',
     color: COLORS.white,
@@ -817,5 +1039,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.green,
+  },
+
+  rejectedNotice: {
+    backgroundColor: COLORS.redBg,
+    borderRadius: 12,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 14,
+  },
+
+  rejectedNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.red,
   },
 });

@@ -1,7 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert, TextInput, Image,
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  TextInput,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,12 +16,12 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 
-import { getSessions, createPayment } from '../../services/api';
+import { createPayment } from '../../services/api';
 import { getAllStudents, getStudentById } from '../../services/studentApi';
 import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../theme';
 
-const ADMIN_METHODS = ['Cash', 'Card', 'Bank Transfer'];
+const ADMIN_METHODS = ['Cash'];
 
 export default function AddPaymentScreen({ navigation, route }) {
   const { user } = useAuth();
@@ -30,7 +37,6 @@ export default function AddPaymentScreen({ navigation, route }) {
     user?.id ||
     user?.studentId;
 
-  const [sessions, setSessions] = useState([]);
   const [students, setStudents] = useState([]);
   const [student, setStudent] = useState(null);
 
@@ -39,7 +45,6 @@ export default function AddPaymentScreen({ navigation, route }) {
 
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState(isStudentEnd ? 'Bank Transfer' : 'Cash');
-  const [sessionId, setSessionId] = useState('');
   const [studentId, setStudentId] = useState('');
   const [reference, setReference] = useState('');
   const [receipt, setReceipt] = useState(null);
@@ -55,21 +60,15 @@ export default function AddPaymentScreen({ navigation, route }) {
           setStudentId(studentData?._id || loggedStudentId);
           setMethod('Bank Transfer');
         } else {
-          const [sessRes, stuRes] = await Promise.all([
-            getSessions(),
-            getAllStudents(),
-          ]);
-
-          setSessions(
-            sessRes.data.filter(
-              s => s.status === 'Scheduled' || s.status === 'Completed'
-            )
-          );
+          const stuRes = await getAllStudents();
 
           setStudents(stuRes.data || []);
+          setMethod('Cash');
+          setReference('');
+          setReceipt(null);
         }
       } catch (error) {
-        console.log('Could not load data:', error.message);
+        console.log('Could not load payment details:', error.message);
         Alert.alert('Error', 'Could not load payment details');
       } finally {
         setLoading(false);
@@ -90,7 +89,7 @@ export default function AddPaymentScreen({ navigation, route }) {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ['images'],
       quality: 0.8,
     });
 
@@ -102,21 +101,12 @@ export default function AddPaymentScreen({ navigation, route }) {
   const generateReceiptHtml = () => {
     const today = new Date().toLocaleString();
 
-    const selectedStudent = students.find(s => s._id === studentId);
-
     const studentName = student
       ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
-      : selectedStudent
-        ? `${selectedStudent.firstName || ''} ${selectedStudent.lastName || ''}`.trim()
-        : 'N/A';
+      : 'N/A';
 
-    const studentEmail = student
-      ? student.email
-      : selectedStudent?.email || 'N/A';
-
-    const studentNIC = student
-      ? student.NIC
-      : selectedStudent?.NIC || 'N/A';
+    const studentEmail = student?.email || 'N/A';
+    const studentNIC = student?.NIC || 'N/A';
 
     return `
       <!DOCTYPE html>
@@ -216,17 +206,17 @@ export default function AddPaymentScreen({ navigation, route }) {
 
             <div class="row">
               <span class="label">Student Name</span>
-              <span class="value">${studentName || 'N/A'}</span>
+              <span class="value">${studentName}</span>
             </div>
 
             <div class="row">
               <span class="label">Email</span>
-              <span class="value">${studentEmail || 'N/A'}</span>
+              <span class="value">${studentEmail}</span>
             </div>
 
             <div class="row">
               <span class="label">NIC</span>
-              <span class="value">${studentNIC || 'N/A'}</span>
+              <span class="value">${studentNIC}</span>
             </div>
           </div>
 
@@ -240,7 +230,7 @@ export default function AddPaymentScreen({ navigation, route }) {
 
             <div class="row">
               <span class="label">Payment Method</span>
-              <span class="value">${method}</span>
+              <span class="value">Bank Transfer</span>
             </div>
 
             <div class="row">
@@ -302,8 +292,8 @@ export default function AddPaymentScreen({ navigation, route }) {
   };
 
   const handleSubmit = async () => {
-    if (!amount || !method) {
-      return Alert.alert('Error', 'Amount and payment method are required');
+    if (!amount) {
+      return Alert.alert('Error', 'Amount is required');
     }
 
     if (isNaN(Number(amount)) || Number(amount) <= 0) {
@@ -325,19 +315,31 @@ export default function AddPaymentScreen({ navigation, route }) {
     try {
       setSubmitting(true);
 
+      if (!isStudentEnd) {
+        const payload = {
+          amount: Number(amount),
+          method: 'Cash',
+          studentId,
+        };
+
+        await createPayment(payload);
+
+        Alert.alert('Success', 'Cash payment recorded successfully!', [
+          {
+            text: 'OK',
+            onPress: () => navigation.goBack(),
+          },
+        ]);
+
+        return;
+      }
+
       const formData = new FormData();
 
       formData.append('amount', amount);
-      formData.append('method', method);
+      formData.append('method', 'Bank Transfer');
       formData.append('studentId', studentId);
-
-      if (!isStudentEnd && sessionId) {
-        formData.append('session', sessionId);
-      }
-
-      if (reference.trim()) {
-        formData.append('reference', reference.trim());
-      }
+      formData.append('reference', reference.trim());
 
       if (receipt) {
         const fileName =
@@ -345,9 +347,7 @@ export default function AddPaymentScreen({ navigation, route }) {
           receipt.uri.split('/').pop() ||
           `receipt_${Date.now()}.jpg`;
 
-        const fileType =
-          receipt.mimeType ||
-          'image/jpeg';
+        const fileType = receipt.mimeType || 'image/jpeg';
 
         formData.append('receipt', {
           uri: receipt.uri,
@@ -358,29 +358,20 @@ export default function AddPaymentScreen({ navigation, route }) {
 
       await createPayment(formData);
 
-      if (isStudentEnd) {
-        Alert.alert(
-          'Payment Submitted Successfully',
-          'Your bank transfer payment details were submitted successfully. You can save your transaction receipt as a PDF.',
-          [
-            {
-              text: 'Save Receipt PDF',
-              onPress: handleSaveReceiptPdf,
-            },
-            {
-              text: 'OK',
-              onPress: () => navigation.goBack(),
-            },
-          ]
-        );
-      } else {
-        Alert.alert('Success', 'Payment recorded successfully!', [
+      Alert.alert(
+        'Payment Submitted Successfully',
+        'Your bank transfer payment details were submitted successfully. You can save your transaction receipt as a PDF.',
+        [
+          {
+            text: 'Save Receipt PDF',
+            onPress: handleSaveReceiptPdf,
+          },
           {
             text: 'OK',
             onPress: () => navigation.goBack(),
           },
-        ]);
-      }
+        ]
+      );
     } catch (err) {
       console.log('Create payment error:', err.response?.data || err.message);
 
@@ -411,7 +402,7 @@ export default function AddPaymentScreen({ navigation, route }) {
         </TouchableOpacity>
 
         <Text style={styles.headerTitle}>
-          {isStudentEnd ? 'Pay Course Fee' : 'Record Payment'}
+          {isStudentEnd ? 'Pay Course Fee' : 'Record Cash Payment'}
         </Text>
 
         <View style={{ width: 24 }} />
@@ -452,13 +443,7 @@ export default function AddPaymentScreen({ navigation, route }) {
               disabled={isStudentEnd}
             >
               <Ionicons
-                name={
-                  m === 'Card'
-                    ? 'card-outline'
-                    : m === 'Cash'
-                    ? 'cash-outline'
-                    : 'business-outline'
-                }
+                name={m === 'Cash' ? 'cash-outline' : 'business-outline'}
                 size={18}
                 color={method === m ? COLORS.black : COLORS.textMuted}
               />
@@ -476,42 +461,42 @@ export default function AddPaymentScreen({ navigation, route }) {
         </View>
 
         {isStudentEnd && (
-          <View style={styles.bankNoteCard}>
-            <View style={styles.bankNoteHeader}>
-              <Ionicons
-                name="information-circle-outline"
-                size={22}
-                color={COLORS.brandOrange}
-              />
-              <Text style={styles.bankNoteTitle}>Bank Transfer Details</Text>
+          <>
+            <View style={styles.bankNoteCard}>
+              <View style={styles.bankNoteHeader}>
+                <Ionicons
+                  name="information-circle-outline"
+                  size={22}
+                  color={COLORS.brandOrange}
+                />
+                <Text style={styles.bankNoteTitle}>Bank Transfer Details</Text>
+              </View>
+
+              <Text style={styles.bankNoteText}>
+                You can pay your course fee via bank transfer. Please transfer the
+                amount to the following account and enter your transaction ID below.
+              </Text>
+
+              <View style={styles.accountBox}>
+                <Text style={styles.accountText}>Account Name: DriveOn Driving School</Text>
+                <Text style={styles.accountText}>Bank: Bank of Ceylon</Text>
+                <Text style={styles.accountText}>Branch: Colombo</Text>
+                <Text style={styles.accountText}>Account No: 1234567890</Text>
+                <Text style={styles.accountText}>Reference: Student NIC / Name</Text>
+              </View>
             </View>
 
-            <Text style={styles.bankNoteText}>
-              You can pay your course fee via bank transfer. Please transfer the
-              amount to the following account and enter your transaction ID below.
-            </Text>
+            <Text style={styles.label}>Transaction ID *</Text>
 
-            <View style={styles.accountBox}>
-              <Text style={styles.accountText}>Account Name: DriveOn Driving School</Text>
-              <Text style={styles.accountText}>Bank: Bank of Ceylon</Text>
-              <Text style={styles.accountText}>Branch: Colombo</Text>
-              <Text style={styles.accountText}>Account No: 1234567890</Text>
-              <Text style={styles.accountText}>Reference: Student NIC / Name</Text>
-            </View>
-          </View>
+            <TextInput
+              style={styles.input}
+              placeholder="e.g. TXN123456"
+              value={reference}
+              onChangeText={setReference}
+              autoCapitalize="characters"
+            />
+          </>
         )}
-
-        <Text style={styles.label}>
-          {isStudentEnd ? 'Transaction ID *' : 'Reference / Transaction ID'}
-        </Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. TXN123456"
-          value={reference}
-          onChangeText={setReference}
-          autoCapitalize="characters"
-        />
 
         {!isStudentEnd && (
           <>
@@ -551,71 +536,34 @@ export default function AddPaymentScreen({ navigation, route }) {
           </>
         )}
 
-        {!isStudentEnd && (
+        {isStudentEnd && (
           <>
-            <Text style={styles.label}>Link to Session (optional)</Text>
+            <Text style={[styles.label, { marginTop: 8 }]}>
+              Upload Receipt *
+            </Text>
 
-            {sessions.length === 0 ? (
-              <Text style={styles.noSessions}>
-                No scheduled or completed sessions available
-              </Text>
-            ) : (
-              sessions.map(s => (
-                <TouchableOpacity
-                  key={s._id}
-                  style={[
-                    styles.sessionCard,
-                    sessionId === s._id && styles.sessionCardActive,
-                  ]}
-                  onPress={() => setSessionId(sessionId === s._id ? '' : s._id)}
-                >
-                  <View style={styles.flex1}>
-                    <Text style={styles.sessionType}>
-                      {s.sessionType || s.type} Session
-                    </Text>
+            <TouchableOpacity style={styles.uploadBtn} onPress={pickReceipt}>
+              {receipt ? (
+                <Image source={{ uri: receipt.uri }} style={styles.receiptPreview} />
+              ) : (
+                <>
+                  <Ionicons
+                    name="cloud-upload-outline"
+                    size={28}
+                    color={COLORS.textMuted}
+                  />
+                  <Text style={styles.uploadText}>Tap to upload receipt image</Text>
+                  <Text style={styles.uploadSubtext}>JPG, PNG, WEBP up to 5MB</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-                    <Text style={styles.sessionMeta}>
-                      {new Date(s.date).toDateString()} · {s.startTime}
-                    </Text>
-                  </View>
-
-                  {sessionId === s._id && (
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={22}
-                      color={COLORS.green}
-                    />
-                  )}
-                </TouchableOpacity>
-              ))
+            {receipt && (
+              <TouchableOpacity onPress={() => setReceipt(null)}>
+                <Text style={styles.removeText}>Remove image</Text>
+              </TouchableOpacity>
             )}
           </>
-        )}
-
-        <Text style={[styles.label, { marginTop: 8 }]}>
-          Upload Receipt {isStudentEnd ? '*' : '(optional)'}
-        </Text>
-
-        <TouchableOpacity style={styles.uploadBtn} onPress={pickReceipt}>
-          {receipt ? (
-            <Image source={{ uri: receipt.uri }} style={styles.receiptPreview} />
-          ) : (
-            <>
-              <Ionicons
-                name="cloud-upload-outline"
-                size={28}
-                color={COLORS.textMuted}
-              />
-              <Text style={styles.uploadText}>Tap to upload receipt image</Text>
-              <Text style={styles.uploadSubtext}>JPG, PNG, WEBP up to 5MB</Text>
-            </>
-          )}
-        </TouchableOpacity>
-
-        {receipt && (
-          <TouchableOpacity onPress={() => setReceipt(null)}>
-            <Text style={styles.removeText}>Remove image</Text>
-          </TouchableOpacity>
         )}
 
         <TouchableOpacity
@@ -627,7 +575,7 @@ export default function AddPaymentScreen({ navigation, route }) {
             <ActivityIndicator color={COLORS.white} />
           ) : (
             <Text style={styles.submitBtnText}>
-              {isStudentEnd ? 'Submit Bank Transfer Payment' : 'Record Payment'}
+              {isStudentEnd ? 'Submit Bank Transfer Payment' : 'Record Cash Payment'}
             </Text>
           )}
         </TouchableOpacity>
