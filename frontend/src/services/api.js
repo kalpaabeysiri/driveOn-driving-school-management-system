@@ -63,12 +63,27 @@ export const updateVehicle  = (id, formData) => api.put(`/vehicles/${id}`, formD
 export const deleteVehicle  = (id) => api.delete(`/vehicles/${id}`);
 
 // ── Payments ──────────────────────────────────────────────────────────────────
-export const getPayments    = ()         => api.get('/payments');
-export const createPayment  = (formData) => api.post('/payments', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
-export const updatePayment  = (id, data) => api.put(`/payments/${id}`, data);
-export const deletePayment  = (id)       => api.delete(`/payments/${id}`);
+export const getPayments = () =>
+  api.get('/payments');
+
+export const getPaymentById = (id) =>
+  api.get(`/payments/${id}`);
+
+export const createPayment = (formData) =>
+  api.post('/payments', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+export const updatePayment = (id, data) =>
+  api.put(`/payments/${id}`, data);
+
+export const updatePaymentWithReceipt = (id, formData) =>
+  api.put(`/payments/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+
+export const deletePayment = (id) =>
+  api.delete(`/payments/${id}`);
 
 // ── Quizzes ───────────────────────────────────────────────────────────────────
 export const getQuizzes   = ()   => api.get('/quizzes');
