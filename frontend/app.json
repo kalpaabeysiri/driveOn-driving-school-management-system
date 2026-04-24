@@ -17,7 +17,10 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFE282"
-      }
+      },
+      "permissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -30,6 +33,9 @@
         }
       ],
       "@react-native-community/datetimepicker"
-    ]
+    ],
+    "ios": {
+      "bundleIdentifier": "com.driveon.app"
+    }
   }
 }
