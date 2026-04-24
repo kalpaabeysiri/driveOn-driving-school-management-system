@@ -217,8 +217,7 @@ const updateStaff = async (req, res) => {
 
     Object.assign(staff, updates);
 
-    // Do not manually hash password here.
-    // Staff model pre-save middleware will hash it if password is modified.
+    // Staff model pre-save middleware will hash password if password is modified.
     await staff.save();
 
     staff.password = undefined;
@@ -331,7 +330,7 @@ const staffLogin = async (req, res) => {
   }
 };
 
-// @desc    Get active staff and instructors for attendance UI
+// @desc    Get active staff and available instructors for attendance UI
 // @route   GET /api/staff/attendance/members
 // @access Private
 const getAttendanceMembers = async (req, res) => {
@@ -341,8 +340,13 @@ const getAttendanceMembers = async (req, res) => {
         .select('employeeId fullName email contactNumber position')
         .sort({ fullName: 1 }),
 
-      Instructor.find({ isActive: true })
-        .select('instructorId employeeId fullName name email contactNumber')
+      Instructor.find({
+        $or: [
+          { available: true },
+          { available: { $exists: false } },
+        ],
+      })
+        .select('fullName email contactNumber licenseNo available')
         .sort({ fullName: 1 }),
     ]);
 
@@ -374,8 +378,14 @@ const getStaffAttendance = async (req, res) => {
     const attendance = await StaffAttendance.findOne({
       date: attendanceDate,
     })
-      .populate('staffAttendance.staff', 'employeeId fullName email contactNumber position')
-      .populate('instructorAttendance.instructor', 'instructorId employeeId fullName name email contactNumber')
+      .populate(
+        'staffAttendance.staff',
+        'employeeId fullName email contactNumber position'
+      )
+      .populate(
+        'instructorAttendance.instructor',
+        'fullName email contactNumber licenseNo available'
+      )
       .populate('markedBy', 'fullName email');
 
     if (!attendance) {
@@ -384,8 +394,13 @@ const getStaffAttendance = async (req, res) => {
           .select('employeeId fullName email contactNumber position')
           .sort({ fullName: 1 }),
 
-        Instructor.find({ isActive: true })
-          .select('instructorId employeeId fullName name email contactNumber')
+        Instructor.find({
+          $or: [
+            { available: true },
+            { available: { $exists: false } },
+          ],
+        })
+          .select('fullName email contactNumber licenseNo available')
           .sort({ fullName: 1 }),
       ]);
 
@@ -429,15 +444,19 @@ const markStaffAttendance = async (req, res) => {
 
     const attendanceDate = normalizeDate(date);
 
-    const formattedStaffAttendance = staffAttendance.map(item => ({
-      staff: item.staff || item.staffId,
-      attended: Boolean(item.attended),
-    }));
+    const formattedStaffAttendance = staffAttendance
+      .filter(item => item.staff || item.staffId)
+      .map(item => ({
+        staff: item.staff || item.staffId,
+        attended: Boolean(item.attended),
+      }));
 
-    const formattedInstructorAttendance = instructorAttendance.map(item => ({
-      instructor: item.instructor || item.instructorId,
-      attended: Boolean(item.attended),
-    }));
+    const formattedInstructorAttendance = instructorAttendance
+      .filter(item => item.instructor || item.instructorId)
+      .map(item => ({
+        instructor: item.instructor || item.instructorId,
+        attended: Boolean(item.attended),
+      }));
 
     const attendance = await StaffAttendance.findOneAndUpdate(
       { date: attendanceDate },
@@ -454,8 +473,14 @@ const markStaffAttendance = async (req, res) => {
         runValidators: true,
       }
     )
-      .populate('staffAttendance.staff', 'employeeId fullName email contactNumber position')
-      .populate('instructorAttendance.instructor', 'instructorId employeeId fullName name email contactNumber')
+      .populate(
+        'staffAttendance.staff',
+        'employeeId fullName email contactNumber position'
+      )
+      .populate(
+        'instructorAttendance.instructor',
+        'fullName email contactNumber licenseNo available'
+      )
       .populate('markedBy', 'fullName email');
 
     res.status(200).json({
