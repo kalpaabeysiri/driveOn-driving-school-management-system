@@ -41,26 +41,30 @@ export const updateSession    = (id, data) => api.put(`/sessions/${id}`, data);
 export const deleteSession    = (id)   => api.delete(`/sessions/${id}`);
 
 // ── Instructors ───────────────────────────────────────────────────────────────
-export const getInstructors     = ()         => api.get('/instructors');
-export const getInstructorById  = (id)       => api.get(`/instructors/${id}`);
-export const createInstructor   = (formData) => api.post('/instructors', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
-export const updateInstructor   = (id, formData) => api.put(`/instructors/${id}`, formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
-export const deleteInstructor   = (id) => api.delete(`/instructors/${id}`);
+export const getInstructors     = ()   => api.get('/instructors');
+export const getInstructorById  = (id) => api.get(`/instructors/${id}`);
+
+export const createInstructor = (formData) =>
+  api.post('/instructors', formData);
+
+export const updateInstructor = (id, formData) =>
+  api.put(`/instructors/${id}`, formData);
+
+export const deleteInstructor = (id) =>
+  api.delete(`/instructors/${id}`);
 
 // ── Vehicles ──────────────────────────────────────────────────────────────────
-export const getVehicles    = ()         => api.get('/vehicles');
-export const getVehicleById = (id)       => api.get(`/vehicles/${id}`);
-export const createVehicle  = (formData) => api.post('/vehicles', formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
-export const updateVehicle  = (id, formData) => api.put(`/vehicles/${id}`, formData, {
-  headers: { 'Content-Type': 'multipart/form-data' },
-});
-export const deleteVehicle  = (id) => api.delete(`/vehicles/${id}`);
+export const getVehicles    = ()   => api.get('/vehicles');
+export const getVehicleById = (id) => api.get(`/vehicles/${id}`);
+
+export const createVehicle = (formData) =>
+  api.post('/vehicles', formData);
+
+export const updateVehicle = (id, formData) =>
+  api.put(`/vehicles/${id}`, formData);
+
+export const deleteVehicle = (id) =>
+  api.delete(`/vehicles/${id}`);
 
 // ── Payments ──────────────────────────────────────────────────────────────────
 export const getPayments = () =>
@@ -70,17 +74,13 @@ export const getPaymentById = (id) =>
   api.get(`/payments/${id}`);
 
 export const createPayment = (formData) =>
-  api.post('/payments', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  api.post('/payments', formData);
 
 export const updatePayment = (id, data) =>
   api.put(`/payments/${id}`, data);
 
 export const updatePaymentWithReceipt = (id, formData) =>
-  api.put(`/payments/${id}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  });
+  api.put(`/payments/${id}`, formData);
 
 export const deletePayment = (id) =>
   api.delete(`/payments/${id}`);
@@ -94,7 +94,7 @@ export const getProgress        = ()       => api.get('/progress');
 export const submitProgress     = (data)   => api.post('/progress', data);
 export const getProgressByQuiz  = (quizId) => api.get(`/progress/quiz/${quizId}`);
 
-// ── Staff Management ────────────────────────────────────────────────────────────
+// ── Staff Management ──────────────────────────────────────────────────────────
 export const getStaff     = (params)   => api.get('/staff', { params });
 export const getStaffById = (id)       => api.get(`/staff/${id}`);
 export const createStaff  = (data)     => api.post('/staff', data);
@@ -102,7 +102,7 @@ export const updateStaff  = (id, data) => api.put(`/staff/${id}`, data);
 export const deleteStaff  = (id)       => api.delete(`/staff/${id}`);
 export const staffLogin   = (data)     => api.post('/staff/login', data);
 
-// ── Staff Attendance ───────────────────────────────────────────────────────────
+// ── Staff Attendance ─────────────────────────────────────────────────────────
 export const getAttendanceMembers = () =>
   api.get('/staff/attendance/members');
 
@@ -115,15 +115,15 @@ export const markStaffAttendance = (data) =>
 export const getStaffPerformance = (params) =>
   api.get('/staff/performance', { params });
 
-// ── Notifications ───────────────────────────────────────────────────────────────
-export const getNotifications         = (params) => api.get('/notifications', { params });
-export const sendNotification         = (data)   => api.post('/notifications', data);
-export const markNotificationRead     = (id)     => api.patch(`/notifications/${id}/read`);
-export const markAllNotificationsRead = ()       => api.patch('/notifications/read-all');
-export const deleteNotification       = (id)     => api.delete(`/notifications/${id}`);
-export const getNotificationStats     = ()       => api.get('/notifications/stats');
+// ── Notifications ─────────────────────────────────────────────────────────────
+export const getNotifications          = (params) => api.get('/notifications', { params });
+export const sendNotification          = (data)   => api.post('/notifications', data);
+export const markNotificationRead      = (id)     => api.patch(`/notifications/${id}/read`);
+export const markAllNotificationsRead  = ()       => api.patch('/notifications/read-all');
+export const deleteNotification        = (id)     => api.delete(`/notifications/${id}`);
+export const getNotificationStats      = ()       => api.get('/notifications/stats');
 
-// ── Inquiries ────────────────────────────────────────────────────────────────────
+// ── Inquiries ────────────────────────────────────────────────────────────────
 export const getInquiries    = (params)   => api.get('/inquiries', { params });
 export const createInquiry   = (data)     => api.post('/inquiries', data);
 export const updateInquiry   = (id, data) => api.put(`/inquiries/${id}`, data);

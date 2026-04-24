@@ -102,19 +102,21 @@ export default function AddPaymentScreen({ navigation, route }) {
   const generateReceiptHtml = () => {
     const today = new Date().toLocaleString();
 
+    const selectedStudent = students.find(s => s._id === studentId);
+
     const studentName = student
       ? `${student.firstName || ''} ${student.lastName || ''}`.trim()
-      : students.find(s => s._id === studentId)
-        ? `${students.find(s => s._id === studentId)?.firstName || ''} ${students.find(s => s._id === studentId)?.lastName || ''}`.trim()
+      : selectedStudent
+        ? `${selectedStudent.firstName || ''} ${selectedStudent.lastName || ''}`.trim()
         : 'N/A';
 
     const studentEmail = student
       ? student.email
-      : students.find(s => s._id === studentId)?.email || 'N/A';
+      : selectedStudent?.email || 'N/A';
 
     const studentNIC = student
       ? student.NIC
-      : students.find(s => s._id === studentId)?.NIC || 'N/A';
+      : selectedStudent?.NIC || 'N/A';
 
     return `
       <!DOCTYPE html>
@@ -338,10 +340,19 @@ export default function AddPaymentScreen({ navigation, route }) {
       }
 
       if (receipt) {
+        const fileName =
+          receipt.fileName ||
+          receipt.uri.split('/').pop() ||
+          `receipt_${Date.now()}.jpg`;
+
+        const fileType =
+          receipt.mimeType ||
+          'image/jpeg';
+
         formData.append('receipt', {
           uri: receipt.uri,
-          type: 'image/jpeg',
-          name: `receipt_${Date.now()}.jpg`,
+          type: fileType,
+          name: fileName,
         });
       }
 
@@ -371,6 +382,8 @@ export default function AddPaymentScreen({ navigation, route }) {
         ]);
       }
     } catch (err) {
+      console.log('Create payment error:', err.response?.data || err.message);
+
       Alert.alert(
         'Error',
         err.response?.data?.message || 'Could not record payment'
@@ -491,6 +504,7 @@ export default function AddPaymentScreen({ navigation, route }) {
         <Text style={styles.label}>
           {isStudentEnd ? 'Transaction ID *' : 'Reference / Transaction ID'}
         </Text>
+
         <TextInput
           style={styles.input}
           placeholder="e.g. TXN123456"
@@ -593,7 +607,7 @@ export default function AddPaymentScreen({ navigation, route }) {
                 color={COLORS.textMuted}
               />
               <Text style={styles.uploadText}>Tap to upload receipt image</Text>
-              <Text style={styles.uploadSubtext}>JPG, PNG up to 5MB</Text>
+              <Text style={styles.uploadSubtext}>JPG, PNG, WEBP up to 5MB</Text>
             </>
           )}
         </TouchableOpacity>
