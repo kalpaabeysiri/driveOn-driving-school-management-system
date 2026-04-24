@@ -1,124 +1,164 @@
 const Staff = require('../models/Staff');
 const StaffAttendance = require('../models/StaffAttendance');
+const Instructor = require('../models/Instructor');
 const Notification = require('../models/Notification');
-const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+
+// Helper: normalize date to start of day
+const normalizeDate = dateValue => {
+  const date = new Date(dateValue);
+  date.setHours(0, 0, 0, 0);
+  return date;
+};
 
 // @desc    Register new staff member
 // @route   POST /api/staff
-// @access Private (Admin only)
+// @access Private
 const createStaff = async (req, res) => {
   try {
     const {
-      fullName, NIC, dateOfBirth, address, city, gender,
-      email, password, contactNumber, emergencyContact,
-      department, position, employmentType, salary, workSchedule,
-      permissions
+      fullName,
+      NIC,
+      dateOfBirth,
+      address,
+      city,
+      gender,
+      email,
+      password,
+      contactNumber,
+      emergencyContact,
+      position,
+      employmentType,
+      salary,
+      permissions,
     } = req.body;
 
-    // Check if staff already exists
     const existingStaff = await Staff.findOne({
-      $or: [{ email }, { NIC }]
+      $or: [
+        { email: email?.toLowerCase()?.trim() },
+        { NIC: NIC?.trim() },
+      ],
     });
 
     if (existingStaff) {
-      return res.status(400).json({ 
-        message: 'Staff member with this email or NIC already exists' 
+      return res.status(400).json({
+        message: 'Staff member with this email or NIC already exists',
       });
     }
 
-    // Generate employee ID — derive next number from the highest existing ID
     const year = new Date().getFullYear();
-    const lastStaff = await Staff.findOne({ employeeId: new RegExp(`^EMP${year}`) }).sort({ employeeId: -1 });
+
+    const lastStaff = await Staff.findOne({
+      employeeId: new RegExp(`^STF${year}`),
+    }).sort({ employeeId: -1 });
+
     let nextNum = 1;
+
     if (lastStaff?.employeeId) {
       const match = lastStaff.employeeId.match(/(\d{4})$/);
-      nextNum = match ? parseInt(match[1]) + 1 : 1;
+      nextNum = match ? parseInt(match[1], 10) + 1 : 1;
     }
-    const employeeId = `EMP${year}${String(nextNum).padStart(4, '0')}`;
+
+    const employeeId = `STF${year}${String(nextNum).padStart(4, '0')}`;
 
     const staff = new Staff({
       employeeId,
-      fullName, NIC, dateOfBirth, address, city, gender,
-      email, password, contactNumber, emergencyContact,
-      department, position, employmentType, salary, workSchedule,
+      fullName,
+      NIC,
+      dateOfBirth,
+      address,
+      city,
+      gender,
+      email,
+      password,
+      contactNumber,
+      emergencyContact,
+      position,
+      employmentType,
+      salary,
       permissions,
-      registeredBy: req.user.id
+      registeredBy: req.user?.id,
     });
 
     await staff.save();
 
-    // Remove password from response
     staff.password = undefined;
 
     res.status(201).json({
       message: 'Staff member created successfully',
-      staff
+      staff,
     });
   } catch (error) {
     console.error('Staff creation error:', error);
-    
-    // Handle validation errors
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
-      return res.status(400).json({ 
-        message: 'Validation failed', 
-        errors 
+
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors,
       });
     }
-    
-    // Handle duplicate key errors
+
     if (error.code === 11000) {
       const field = Object.keys(error.keyValue)[0];
-      return res.status(400).json({ 
-        message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists` 
+
+      return res.status(400).json({
+        message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`,
       });
     }
-    
+
     res.status(500).json({ message: error.message });
   }
 };
 
 // @desc    Get all staff members
 // @route   GET /api/staff
-// @access Private (Admin, HR)
+// @access Private
 const getAllStaff = async (req, res) => {
   try {
-    const { department, status, page = 1, limit = 20, search } = req.query;
-    
-    // Build filter
+    const {
+      status,
+      page = 1,
+      limit = 20,
+      search,
+    } = req.query;
+
     const filter = {};
-    if (department) filter.department = department;
-    if (status) filter.isActive = status === 'active';
-    
-    // Search functionality
+
+    if (status) {
+      filter.isActive = status === 'active';
+    }
+
     if (search) {
       filter.$or = [
         { fullName: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { employeeId: { $regex: search, $options: 'i' } },
-        { position: { $regex: search, $options: 'i' } }
+        { NIC: { $regex: search, $options: 'i' } },
+        { position: { $regex: search, $options: 'i' } },
       ];
     }
 
-    const skip = (page - 1) * limit;
+    const skip = (Number(page) - 1) * Number(limit);
 
     const [staff, total] = await Promise.all([
       Staff.find(filter)
         .select('-password')
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
-      Staff.countDocuments(filter)
+        .limit(Number(limit)),
+      Staff.countDocuments(filter),
     ]);
 
     res.json({
       staff,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: Number(page),
+        limit: Number(limit),
         total,
-        pages: Math.ceil(total / limit)
-      }
+        pages: Math.ceil(total / Number(limit)),
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -131,19 +171,21 @@ const getAllStaff = async (req, res) => {
 const getStaffById = async (req, res) => {
   try {
     const staff = await Staff.findById(req.params.id).select('-password');
-    
+
     if (!staff) {
       return res.status(404).json({ message: 'Staff member not found' });
     }
 
-    // Get recent attendance
-    const recentAttendance = await StaffAttendance.find({ staff: staff._id })
+    const recentAttendance = await StaffAttendance.find({
+      'staffAttendance.staff': staff._id,
+    })
+      .select('date staffAttendance createdDate modifiedDate')
       .sort({ date: -1 })
       .limit(10);
 
     res.json({
       staff,
-      recentAttendance
+      recentAttendance,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -152,53 +194,77 @@ const getStaffById = async (req, res) => {
 
 // @desc    Update staff member
 // @route   PUT /api/staff/:id
-// @access Private (Admin only)
+// @access Private
 const updateStaff = async (req, res) => {
   try {
     const staff = await Staff.findById(req.params.id);
-    
+
     if (!staff) {
       return res.status(404).json({ message: 'Staff member not found' });
     }
 
-    // Update fields
-    const updates = req.body;
-    updates.modifiedBy = req.user.id;
+    const updates = { ...req.body };
 
-    // If password is being updated, hash it
-    if (updates.password) {
-      const salt = await bcrypt.genSalt(10);
-      updates.password = await bcrypt.hash(updates.password, salt);
+    delete updates.department;
+    delete updates.workSchedule;
+    delete updates.employeeId;
+
+    if (!updates.password) {
+      delete updates.password;
     }
 
+    updates.modifiedBy = req.user?.id;
+
     Object.assign(staff, updates);
+
+    // Do not manually hash password here.
+    // Staff model pre-save middleware will hash it if password is modified.
     await staff.save();
 
     staff.password = undefined;
 
     res.json({
       message: 'Staff member updated successfully',
-      staff
+      staff,
     });
   } catch (error) {
+    console.error('Staff update error:', error);
+
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+
+      return res.status(400).json({
+        message: `${field.charAt(0).toUpperCase() + field.slice(1)} already exists`,
+      });
+    }
+
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Delete staff member
+// @desc    Deactivate staff member
 // @route   DELETE /api/staff/:id
-// @access Private (Admin only)
+// @access Private
 const deleteStaff = async (req, res) => {
   try {
     const staff = await Staff.findById(req.params.id);
-    
+
     if (!staff) {
       return res.status(404).json({ message: 'Staff member not found' });
     }
 
-    // Soft delete by deactivating
     staff.isActive = false;
-    staff.modifiedBy = req.user.id;
+    staff.modifiedBy = req.user?.id;
+
     await staff.save();
 
     res.json({ message: 'Staff member deactivated successfully' });
@@ -214,35 +280,38 @@ const staffLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check for staff member
-    const staff = await Staff.findOne({ email, isActive: true });
-    
+    if (!email || !password) {
+      return res.status(400).json({
+        message: 'Email and password are required',
+      });
+    }
+
+    const staff = await Staff.findOne({
+      email: email.toLowerCase().trim(),
+      isActive: true,
+    });
+
     if (!staff) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Check password
     const isMatch = await staff.matchPassword(password);
-    
+
     if (!isMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
-    // Generate token
-    const jwt = require('jsonwebtoken');
     const token = jwt.sign(
-      { 
-        id: staff._id, 
+      {
+        id: staff._id,
         email: staff.email,
         role: 'staff',
-        department: staff.department,
-        permissions: staff.permissions
+        position: staff.position,
+        permissions: staff.permissions,
       },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     );
-
-    staff.password = undefined;
 
     res.json({
       token,
@@ -251,178 +320,220 @@ const staffLogin = async (req, res) => {
         name: staff.fullName,
         email: staff.email,
         role: 'staff',
-        department: staff.department,
+        position: staff.position,
         permissions: staff.permissions,
-        employeeId: staff.employeeId
-      }
+        employeeId: staff.employeeId,
+      },
     });
   } catch (error) {
+    console.error('Staff login error:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Get staff attendance
-// @route   GET /api/staff/attendance
-// @access Private (Admin, HR)
-const getStaffAttendance = async (req, res) => {
+// @desc    Get active staff and instructors for attendance UI
+// @route   GET /api/staff/attendance/members
+// @access Private
+const getAttendanceMembers = async (req, res) => {
   try {
-    const { 
-      staffId, department, status, month, year, 
-      page = 1, limit = 20 
-    } = req.query;
-    
-    // Build filter
-    const filter = {};
-    if (staffId) filter.staff = staffId;
-    if (status) filter.status = status;
-    
-    // Filter by date range
-    if (month && year) {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
-      filter.date = { $gte: startDate, $lte: endDate };
-    }
-    
-    // If department is specified, get staff from that department
-    if (department) {
-      const staffMembers = await Staff.find({ department }).select('_id');
-      filter.staff = { $in: staffMembers.map(s => s._id) };
-    }
+    const [staffMembers, instructors] = await Promise.all([
+      Staff.find({ isActive: true })
+        .select('employeeId fullName email contactNumber position')
+        .sort({ fullName: 1 }),
 
-    const skip = (page - 1) * limit;
-
-    const [attendance, total] = await Promise.all([
-      StaffAttendance.find(filter)
-        .populate('staff', 'fullName employeeId department position')
-        .populate('verifiedBy', 'fullName employeeId')
-        .sort({ date: -1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
-      StaffAttendance.countDocuments(filter)
+      Instructor.find({ isActive: true })
+        .select('instructorId employeeId fullName name email contactNumber')
+        .sort({ fullName: 1 }),
     ]);
 
     res.json({
-      attendance,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / limit)
-      }
+      staff: staffMembers,
+      instructors,
     });
   } catch (error) {
+    console.error('Get attendance members error:', error);
     res.status(500).json({ message: error.message });
   }
 };
 
-// @desc    Mark staff attendance
-// @route   POST /api/staff/attendance
-// @access Private (Admin, HR)
-const markStaffAttendance = async (req, res) => {
+// @desc    Get attendance by date
+// @route   GET /api/staff/attendance?date=2026-04-24
+// @access Private
+const getStaffAttendance = async (req, res) => {
   try {
-    const { staffId, date, checkIn, checkOut, status, remarks, performanceMetrics } = req.body;
+    const { date } = req.query;
 
-    // Check if attendance already exists for this date
-    const existing = await StaffAttendance.findOne({
-      staff: staffId,
-      date: new Date(date).setHours(0, 0, 0, 0)
-    });
-
-    if (existing) {
-      return res.status(400).json({ 
-        message: 'Attendance already marked for this date' 
+    if (!date) {
+      return res.status(400).json({
+        message: 'Date is required',
       });
     }
 
-    const attendance = new StaffAttendance({
-      staff: staffId,
+    const attendanceDate = normalizeDate(date);
+
+    const attendance = await StaffAttendance.findOne({
+      date: attendanceDate,
+    })
+      .populate('staffAttendance.staff', 'employeeId fullName email contactNumber position')
+      .populate('instructorAttendance.instructor', 'instructorId employeeId fullName name email contactNumber')
+      .populate('markedBy', 'fullName email');
+
+    if (!attendance) {
+      const [staffMembers, instructors] = await Promise.all([
+        Staff.find({ isActive: true })
+          .select('employeeId fullName email contactNumber position')
+          .sort({ fullName: 1 }),
+
+        Instructor.find({ isActive: true })
+          .select('instructorId employeeId fullName name email contactNumber')
+          .sort({ fullName: 1 }),
+      ]);
+
+      return res.json({
+        date: attendanceDate,
+        staffAttendance: staffMembers.map(staff => ({
+          staff,
+          attended: false,
+        })),
+        instructorAttendance: instructors.map(instructor => ({
+          instructor,
+          attended: false,
+        })),
+      });
+    }
+
+    res.json(attendance);
+  } catch (error) {
+    console.error('Get staff attendance error:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Save staff and instructor attendance sheet
+// @route   POST /api/staff/attendance
+// @access Private
+const markStaffAttendance = async (req, res) => {
+  try {
+    const {
       date,
-      checkIn,
-      checkOut,
-      status,
+      staffAttendance = [],
+      instructorAttendance = [],
       remarks,
-      performanceMetrics,
-      verifiedBy: req.user.id
-    });
+    } = req.body;
 
-    await attendance.save();
+    if (!date) {
+      return res.status(400).json({
+        message: 'Date is required',
+      });
+    }
 
-    res.status(201).json({
-      message: 'Attendance marked successfully',
-      attendance
+    const attendanceDate = normalizeDate(date);
+
+    const formattedStaffAttendance = staffAttendance.map(item => ({
+      staff: item.staff || item.staffId,
+      attended: Boolean(item.attended),
+    }));
+
+    const formattedInstructorAttendance = instructorAttendance.map(item => ({
+      instructor: item.instructor || item.instructorId,
+      attended: Boolean(item.attended),
+    }));
+
+    const attendance = await StaffAttendance.findOneAndUpdate(
+      { date: attendanceDate },
+      {
+        date: attendanceDate,
+        staffAttendance: formattedStaffAttendance,
+        instructorAttendance: formattedInstructorAttendance,
+        remarks,
+        markedBy: req.user?.id,
+      },
+      {
+        new: true,
+        upsert: true,
+        runValidators: true,
+      }
+    )
+      .populate('staffAttendance.staff', 'employeeId fullName email contactNumber position')
+      .populate('instructorAttendance.instructor', 'instructorId employeeId fullName name email contactNumber')
+      .populate('markedBy', 'fullName email');
+
+    res.status(200).json({
+      message: 'Attendance saved successfully',
+      attendance,
     });
   } catch (error) {
+    console.error('Mark attendance error:', error);
+
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(err => err.message);
+
+      return res.status(400).json({
+        message: 'Validation failed',
+        errors,
+      });
+    }
+
     res.status(500).json({ message: error.message });
   }
 };
 
 // @desc    Get staff performance report
 // @route   GET /api/staff/performance
-// @access Private (Admin, HR)
+// @access Private
 const getStaffPerformance = async (req, res) => {
   try {
-    const { department, month, year } = req.query;
-    
-    // Build date filter
+    const { month, year } = req.query;
+
     const dateFilter = {};
+
     if (month && year) {
-      const startDate = new Date(year, month - 1, 1);
-      const endDate = new Date(year, month, 0);
-      dateFilter.date = { $gte: startDate, $lte: endDate };
+      const startDate = new Date(Number(year), Number(month) - 1, 1);
+      const endDate = new Date(Number(year), Number(month), 0);
+      endDate.setHours(23, 59, 59, 999);
+
+      dateFilter.date = {
+        $gte: startDate,
+        $lte: endDate,
+      };
     }
 
-    // Build staff filter
-    const staffFilter = {};
-    if (department) staffFilter.department = department;
+    const attendanceRecords = await StaffAttendance.find(dateFilter)
+      .populate('staffAttendance.staff', 'employeeId fullName position')
+      .sort({ date: -1 });
 
-    // Get staff with their performance metrics
-    const performance = await Staff.aggregate([
-      { $match: staffFilter },
-      {
-        $lookup: {
-          from: 'staffattendances',
-          let: { staffId: '$_id' },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ['$staff', '$$staffId'] },
-                ...dateFilter
-              }
-            },
-            {
-              $group: {
-                _id: null,
-                totalDays: { $sum: 1 },
-                presentDays: {
-                  $sum: { $cond: [{ $eq: ['$status', 'Present'] }, 1, 0] }
-                },
-                lateDays: {
-                  $sum: { $cond: [{ $eq: ['$status', 'Late'] }, 1, 0] }
-                },
-                totalWorkHours: { $sum: '$workHours' },
-                totalOvertimeHours: { $sum: '$overtimeHours' },
-                avgEfficiency: { $avg: '$performanceMetrics.efficiency' },
-                avgCustomerRating: { $avg: '$performanceMetrics.customerRating' },
-                totalTasksCompleted: { $sum: '$performanceMetrics.tasksCompleted' }
-              }
-            }
-          ],
-          as: 'attendance'
-        }
-      },
-      {
-        $project: {
-          fullName: 1,
-          employeeId: 1,
-          department: 1,
-          position: 1,
-          attendance: { $arrayElemAt: ['$attendance', 0] }
-        }
-      }
-    ]);
+    const reportMap = {};
 
-    res.json({ performance });
+    attendanceRecords.forEach(record => {
+      record.staffAttendance.forEach(item => {
+        if (!item.staff) return;
+
+        const staffId = item.staff._id.toString();
+
+        if (!reportMap[staffId]) {
+          reportMap[staffId] = {
+            staff: item.staff,
+            totalMarkedDays: 0,
+            presentDays: 0,
+            absentDays: 0,
+          };
+        }
+
+        reportMap[staffId].totalMarkedDays += 1;
+
+        if (item.attended) {
+          reportMap[staffId].presentDays += 1;
+        } else {
+          reportMap[staffId].absentDays += 1;
+        }
+      });
+    });
+
+    res.json({
+      performance: Object.values(reportMap),
+    });
   } catch (error) {
+    console.error('Get staff performance error:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -434,7 +545,9 @@ module.exports = {
   updateStaff,
   deleteStaff,
   staffLogin,
+
+  getAttendanceMembers,
   getStaffAttendance,
   markStaffAttendance,
-  getStaffPerformance
+  getStaffPerformance,
 };
