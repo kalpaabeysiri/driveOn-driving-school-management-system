@@ -10,6 +10,8 @@ const generateToken = (instructor) =>
 // @route POST /api/instructors
 
 const createInstructor = async (req, res) => {
+
+  
   
   try {
     const {
