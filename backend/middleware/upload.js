@@ -16,18 +16,27 @@ const storage = multer.diskStorage({
 
   filename: (req, file, cb) => {
     const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+
     const originalExt = path.extname(file.originalname).toLowerCase();
 
-    const safeExt = originalExt || '.jpg';
+    let safeExt = originalExt;
+
+    if (!safeExt) {
+      if (file.mimetype === 'image/png') safeExt = '.png';
+      else if (file.mimetype === 'image/webp') safeExt = '.webp';
+      else if (file.mimetype === 'image/heic') safeExt = '.heic';
+      else if (file.mimetype === 'image/heif') safeExt = '.heif';
+      else safeExt = '.jpg';
+    }
 
     cb(null, `${file.fieldname}-${uniqueSuffix}${safeExt}`);
   },
 });
 
 const fileFilter = (req, file, cb) => {
-  const allowedExtensions = /jpeg|jpg|png|webp|heic|heif/;
+  const allowedExtensions = /\.(jpeg|jpg|png|webp|heic|heif)$/i;
 
-  const extname = allowedExtensions.test(
+  const hasAllowedExtension = allowedExtensions.test(
     path.extname(file.originalname).toLowerCase()
   );
 
@@ -38,12 +47,18 @@ const fileFilter = (req, file, cb) => {
     'image/webp',
     'image/heic',
     'image/heif',
-    'application/octet-stream',
   ];
 
-  const mimetype = allowedMimeTypes.includes(file.mimetype);
+  const hasAllowedMimeType = allowedMimeTypes.includes(file.mimetype);
 
-  if (extname || mimetype) {
+  /*
+    Expo / React Native can sometimes send image uploads as application/octet-stream.
+    In that case, accept it only if the file extension is valid.
+  */
+  const isReactNativeOctetStreamImage =
+    file.mimetype === 'application/octet-stream' && hasAllowedExtension;
+
+  if (hasAllowedExtension || hasAllowedMimeType || isReactNativeOctetStreamImage) {
     cb(null, true);
   } else {
     cb(

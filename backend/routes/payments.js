@@ -9,7 +9,7 @@ const {
   deletePayment,
 } = require('../controllers/paymentController');
 
-const { protect, adminOnly } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
 router
@@ -20,7 +20,7 @@ router
 router
   .route('/:id')
   .get(protect, getPaymentById)
-  .put(protect, adminOnly, upload.single('receipt'), updatePayment)
-  .delete(protect, adminOnly, deletePayment);
+  .put(protect, upload.single('receipt'), updatePayment)
+  .delete(protect, deletePayment);
 
 module.exports = router;

@@ -24,11 +24,18 @@ const createPayment = async (req, res) => {
       });
     }
 
-    const isAdmin = req.user.role === 'admin';
+    const loggedUserId = req.user.id || req.user._id?.toString();
+    const isStudentUser = req.user.role === 'student';
 
-    // Admin can select any student.
-    // Student can only pay for himself/herself.
-    const payingStudent = isAdmin && studentId ? studentId : req.user.id;
+    /*
+      Student side:
+      - Student can only pay for themselves.
+
+      Admin/staff side:
+      - Admin or staff must select a student.
+      - The selected studentId will be used as the payment owner.
+    */
+    const payingStudent = isStudentUser ? loggedUserId : studentId;
 
     if (!payingStudent) {
       return res.status(400).json({
@@ -36,7 +43,7 @@ const createPayment = async (req, res) => {
       });
     }
 
-    // For bank transfer, transaction/reference is required
+    // Bank transfer must have transaction ID.
     if (method === 'Bank Transfer' && !reference) {
       return res.status(400).json({
         message: 'Transaction ID is required for bank transfer payments',
@@ -45,7 +52,10 @@ const createPayment = async (req, res) => {
 
     const receipt = req.file ? `/uploads/${req.file.filename}` : null;
 
-    // Bank transfers should wait for admin verification
+    /*
+      Cash payments are completed immediately.
+      Bank transfers are pending until admin accepts them.
+    */
     const paymentStatus = method === 'Bank Transfer' ? 'Pending' : 'Completed';
 
     const payment = await Payment.create({
@@ -68,15 +78,21 @@ const createPayment = async (req, res) => {
     });
   } catch (error) {
     console.error('Create payment error:', error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message || 'Server error while creating payment',
+    });
   }
 };
 
-// @desc  Get all payments admin or my payments student
+// @desc  Get all payments for admin/staff or my payments for student
 // @route GET /api/payments
 const getPayments = async (req, res) => {
   try {
-    const filter = req.user.role === 'admin' ? {} : { student: req.user.id };
+    const loggedUserId = req.user.id || req.user._id?.toString();
+    const isStudentUser = req.user.role === 'student';
+
+    const filter = isStudentUser ? { student: loggedUserId } : {};
 
     const payments = await Payment.find(filter)
       .populate('student', 'name firstName lastName email NIC')
@@ -86,7 +102,10 @@ const getPayments = async (req, res) => {
     res.json(payments);
   } catch (error) {
     console.error('Get payments error:', error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message || 'Server error while loading payments',
+    });
   }
 };
 
@@ -94,6 +113,9 @@ const getPayments = async (req, res) => {
 // @route GET /api/payments/:id
 const getPaymentById = async (req, res) => {
   try {
+    const loggedUserId = req.user.id || req.user._id?.toString();
+    const isStudentUser = req.user.role === 'student';
+
     const payment = await Payment.findById(req.params.id)
       .populate('student', 'name firstName lastName email NIC')
       .populate('session', 'type sessionType date startTime');
@@ -104,9 +126,13 @@ const getPaymentById = async (req, res) => {
       });
     }
 
+    /*
+      Student can only view their own payments.
+      Admin/staff can view all payments.
+    */
     if (
-      req.user.role !== 'admin' &&
-      payment.student?._id?.toString() !== req.user.id
+      isStudentUser &&
+      payment.student?._id?.toString() !== loggedUserId
     ) {
       return res.status(403).json({
         message: 'Not authorized to view this payment',
@@ -116,11 +142,14 @@ const getPaymentById = async (req, res) => {
     res.json(payment);
   } catch (error) {
     console.error('Get payment by ID error:', error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message || 'Server error while loading payment details',
+    });
   }
 };
 
-// @desc  Update payment status Admin
+// @desc  Update payment status Admin/Staff
 // @route PUT /api/payments/:id
 const updatePayment = async (req, res) => {
   try {
@@ -145,17 +174,38 @@ const updatePayment = async (req, res) => {
 
       if (status === 'Completed') {
         payment.paidAt = payment.paidAt || new Date();
-      }
-
-      if (status !== 'Completed') {
+      } else {
         payment.paidAt = undefined;
       }
     }
 
-    if (reference !== undefined) payment.reference = reference;
-    if (amount !== undefined) payment.amount = Number(amount);
-    if (method !== undefined) payment.method = method;
-    if (session !== undefined) payment.session = session || undefined;
+    if (reference !== undefined) {
+      payment.reference = reference;
+    }
+
+    if (amount !== undefined) {
+      if (Number(amount) <= 0) {
+        return res.status(400).json({
+          message: 'Amount must be greater than 0',
+        });
+      }
+
+      payment.amount = Number(amount);
+    }
+
+    if (method !== undefined) {
+      if (!['Cash', 'Card', 'Bank Transfer'].includes(method)) {
+        return res.status(400).json({
+          message: 'Invalid payment method',
+        });
+      }
+
+      payment.method = method;
+    }
+
+    if (session !== undefined) {
+      payment.session = session || undefined;
+    }
 
     if (req.file) {
       payment.receipt = `/uploads/${req.file.filename}`;
@@ -163,17 +213,24 @@ const updatePayment = async (req, res) => {
 
     await payment.save();
 
+    const updatedPayment = await Payment.findById(payment._id)
+      .populate('student', 'name firstName lastName email NIC')
+      .populate('session', 'type sessionType date startTime');
+
     res.json({
       message: 'Payment updated successfully',
-      payment,
+      payment: updatedPayment,
     });
   } catch (error) {
     console.error('Update payment error:', error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message || 'Server error while updating payment',
+    });
   }
 };
 
-// @desc  Delete payment Admin
+// @desc  Delete payment Admin/Staff
 // @route DELETE /api/payments/:id
 const deletePayment = async (req, res) => {
   try {
@@ -192,7 +249,10 @@ const deletePayment = async (req, res) => {
     });
   } catch (error) {
     console.error('Delete payment error:', error);
-    res.status(500).json({ message: error.message });
+
+    res.status(500).json({
+      message: error.message || 'Server error while deleting payment',
+    });
   }
 };
 
