@@ -1,7 +1,14 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  View, Text, FlatList, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, RefreshControl, Platform,
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -38,6 +45,7 @@ export default function AvailableSessionsScreen({ navigation }) {
   const [refreshing, setRefreshing] = useState(false);
   const [activeTab, setActiveTab] = useState('available');
   const [bookingId, setBookingId] = useState(null);
+  const [reminderLoadingId, setReminderLoadingId] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -46,9 +54,10 @@ export default function AvailableSessionsScreen({ navigation }) {
         getMyBookedSessions(),
       ]);
 
-      setSessions(avail.data);
-      setMyBookings(booked.data);
-    } catch {
+      setSessions(avail.data || []);
+      setMyBookings(booked.data || []);
+    } catch (error) {
+      console.log('Load sessions error:', error.response?.data || error.message);
       Alert.alert('Error', 'Could not load sessions');
     } finally {
       setLoading(false);
@@ -67,15 +76,101 @@ export default function AvailableSessionsScreen({ navigation }) {
           name: 'Booking Reminders',
           importance: Notifications.AndroidImportance.HIGH,
           sound: 'default',
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF7A00',
         });
       }
 
-      const { status } = await Notifications.requestPermissionsAsync();
-      return status === 'granted';
+      const currentPermission = await Notifications.getPermissionsAsync();
+
+      if (currentPermission.status === 'granted') {
+        return true;
+      }
+
+      const requestedPermission = await Notifications.requestPermissionsAsync();
+
+      return requestedPermission.status === 'granted';
     } catch (error) {
-      console.log('Permission error:', error);
+      console.log('Notification permission error:', error);
       return false;
     }
+  };
+
+  const parseSessionDateTime = (dateValue, startTime) => {
+    if (!dateValue || !startTime) {
+      return null;
+    }
+
+    const sessionDate = new Date(dateValue);
+
+    if (Number.isNaN(sessionDate.getTime())) {
+      return null;
+    }
+
+    const cleanTime = String(startTime).trim();
+
+    /*
+      Supports:
+      09:30
+      9:30
+      09:30 AM
+      9:30 PM
+    */
+    const timeMatch = cleanTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
+
+    if (!timeMatch) {
+      return null;
+    }
+
+    let hours = Number(timeMatch[1]);
+    const minutes = Number(timeMatch[2]);
+    const period = timeMatch[3]?.toUpperCase();
+
+    if (
+      Number.isNaN(hours) ||
+      Number.isNaN(minutes) ||
+      minutes < 0 ||
+      minutes > 59
+    ) {
+      return null;
+    }
+
+    if (period) {
+      if (hours < 1 || hours > 12) {
+        return null;
+      }
+
+      if (period === 'PM' && hours < 12) {
+        hours += 12;
+      }
+
+      if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+    } else {
+      if (hours < 0 || hours > 23) {
+        return null;
+      }
+    }
+
+    sessionDate.setHours(hours);
+    sessionDate.setMinutes(minutes);
+    sessionDate.setSeconds(0);
+    sessionDate.setMilliseconds(0);
+
+    return sessionDate;
+  };
+
+  const buildDateTrigger = (reminderTime) => {
+    if (Notifications.SchedulableTriggerInputTypes?.DATE) {
+      return {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: reminderTime,
+        channelId: Platform.OS === 'android' ? 'booking-reminders' : undefined,
+      };
+    }
+
+    return reminderTime;
   };
 
   const setBookingReminder = async (booking) => {
@@ -84,7 +179,7 @@ export default function AvailableSessionsScreen({ navigation }) {
     if (!hasPermission) {
       Alert.alert(
         'Permission Needed',
-        'Please allow notifications to set booking reminders.'
+        'Please allow notifications from your phone settings to set booking reminders.'
       );
       return;
     }
@@ -111,14 +206,17 @@ export default function AvailableSessionsScreen({ navigation }) {
 
   const scheduleReminder = async (booking, minutesBefore) => {
     try {
-      const sessionDate = new Date(booking.date);
+      setReminderLoadingId(booking._id);
 
-      const [hours, minutes] = booking.startTime.split(':');
+      const sessionDate = parseSessionDateTime(booking.date, booking.startTime);
 
-      sessionDate.setHours(Number(hours));
-      sessionDate.setMinutes(Number(minutes));
-      sessionDate.setSeconds(0);
-      sessionDate.setMilliseconds(0);
+      if (!sessionDate) {
+        Alert.alert(
+          'Invalid Session Time',
+          'Could not read the session date or start time.'
+        );
+        return;
+      }
 
       const reminderTime = new Date(
         sessionDate.getTime() - minutesBefore * 60 * 1000
@@ -127,45 +225,63 @@ export default function AvailableSessionsScreen({ navigation }) {
       if (reminderTime <= new Date()) {
         Alert.alert(
           'Invalid Reminder',
-          'This reminder time has already passed.'
+          'This reminder time has already passed. Please select another reminder time.'
         );
         return;
       }
 
-      await Notifications.scheduleNotificationAsync({
+      const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Booking Reminder 🚗',
-          body: `Your ${booking.sessionType} session starts at ${booking.startTime}`,
-          sound: true,
+          body: `Your ${booking.sessionType || 'driving'} session starts at ${booking.startTime}`,
+          sound: 'default',
           data: {
             bookingId: booking._id,
+            sessionType: booking.sessionType,
+            sessionDate: booking.date,
+            startTime: booking.startTime,
           },
         },
-        trigger: reminderTime,
+        trigger: buildDateTrigger(reminderTime),
       });
+
+      console.log('Reminder scheduled successfully:', notificationId);
 
       Alert.alert(
         'Reminder Set ✅',
         `You will be reminded ${minutesBefore} minutes before the session.`
       );
     } catch (error) {
-      console.log('Reminder error:', error);
-      Alert.alert('Error', 'Could not set reminder. Please try again.');
+      console.log('Reminder error full:', error);
+
+      Alert.alert(
+        'Error',
+        error?.message || 'Could not set reminder. Please try again.'
+      );
+    } finally {
+      setReminderLoadingId(null);
     }
   };
 
   const handleBook = async (sessionId) => {
     Alert.alert('Book Session', 'Are you sure you want to book this session?', [
-      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Cancel',
+        style: 'cancel',
+      },
       {
         text: 'Book Now',
         onPress: async () => {
           try {
             setBookingId(sessionId);
+
             await bookSession(sessionId);
+
             Alert.alert('Booked! ✅', 'Session booked successfully!');
             fetchData();
           } catch (err) {
+            console.log('Book session error:', err.response?.data || err.message);
+
             Alert.alert(
               'Error',
               err.response?.data?.message || 'Could not book session'
@@ -178,7 +294,8 @@ export default function AvailableSessionsScreen({ navigation }) {
     ]);
   };
 
-  const isBooked = (sessionId) => myBookings.some((b) => b._id === sessionId);
+  const isBooked = (sessionId) =>
+    myBookings.some((booking) => booking._id === sessionId);
 
   const renderSession = ({ item }) => {
     const booked = isBooked(item._id);
@@ -342,6 +459,20 @@ export default function AvailableSessionsScreen({ navigation }) {
               },
             ]}
           >
+            <Ionicons
+              name={
+                item.sessionType === 'Theory'
+                  ? 'book-outline'
+                  : 'car-outline'
+              }
+              size={12}
+              color={
+                item.sessionType === 'Theory'
+                  ? COLORS.blue
+                  : COLORS.black
+              }
+            />
+
             <Text
               style={[
                 styles.typeBadgeText,
@@ -379,13 +510,31 @@ export default function AvailableSessionsScreen({ navigation }) {
           </Text>
         </View>
 
+        {item.vehicle && (
+          <View style={styles.detailRow}>
+            <Ionicons name="car-outline" size={14} color={COLORS.textMuted} />
+            <Text style={styles.detailText}>
+              {item.vehicle.brand} {item.vehicle.model} ·{' '}
+              {item.vehicle.licensePlate}
+            </Text>
+          </View>
+        )}
+
         {item.status === 'Scheduled' && (
           <TouchableOpacity
             style={styles.reminderBtn}
             onPress={() => setBookingReminder(item)}
+            disabled={reminderLoadingId === item._id}
           >
-            <Ionicons name="alarm-outline" size={14} color={COLORS.blue} />
-            <Text style={styles.reminderBtnText}>Set Reminder</Text>
+            {reminderLoadingId === item._id ? (
+              <ActivityIndicator size="small" color={COLORS.blue} />
+            ) : (
+              <Ionicons name="alarm-outline" size={14} color={COLORS.blue} />
+            )}
+
+            <Text style={styles.reminderBtnText}>
+              {reminderLoadingId === item._id ? 'Setting...' : 'Set Reminder'}
+            </Text>
           </TouchableOpacity>
         )}
 
@@ -439,19 +588,19 @@ export default function AvailableSessionsScreen({ navigation }) {
         {[
           { key: 'available', label: `Available (${sessions.length})` },
           { key: 'mybookings', label: `My Bookings (${myBookings.length})` },
-        ].map((t) => (
+        ].map((tabItem) => (
           <TouchableOpacity
-            key={t.key}
-            style={[styles.tab, activeTab === t.key && styles.tabActive]}
-            onPress={() => setActiveTab(t.key)}
+            key={tabItem.key}
+            style={[styles.tab, activeTab === tabItem.key && styles.tabActive]}
+            onPress={() => setActiveTab(tabItem.key)}
           >
             <Text
               style={[
                 styles.tabText,
-                activeTab === t.key && styles.tabTextActive,
+                activeTab === tabItem.key && styles.tabTextActive,
               ]}
             >
-              {t.label}
+              {tabItem.label}
             </Text>
           </TouchableOpacity>
         ))}
