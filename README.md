@@ -12,7 +12,7 @@
 | Database  | MongoDB Atlas                 |
 | Auth      | JWT + bcryptjs                |
 | Storage   | Multer (image uploads)        |
-| Deploy    | Render / Railway (backend)    |
+| Deploy    | Railway (backend)             |
 
 ---
 
@@ -152,11 +152,11 @@ Scan QR code with Expo Go app.
 
 ## Workload Distribution (6 Members)
 
-| Member | Module         | Entity      | Focus Area                        |
-|--------|----------------|-------------|-----------------------------------|
-| 1      | Auth Lead      | User        | Register, Login, JWT, Protected Routes |
-| 2      | Sessions       | Session     | Book, view, cancel sessions       |
-| 3      | Instructors    | Instructor  | CRUD + image upload               |
-| 4      | Vehicles       | Vehicle     | CRUD + image upload               |
-| 5      | Payments       | Payment     | Record, view, receipt upload      |
-| 6      | Quizzes        | Quiz/Progress| Create quizzes, track results    |
+| Member | Module                                     | Entity                 | Focus Area                                 |
+|--------|--------------------------------------------|------------------------|--------------------------------------------|
+| 1      | Student Enrollment and Managing Module     |Student /Payment/Inquiry| CRUD operations + session reminder feature |
+| 2      | Session Management Module                  | Session                | Book, View, Cancel, Manage Sessions        |
+| 3      | Instructor and Vehicle Management Module   | Instructor / Vehicle   | CRUD + Image Upload                        |
+| 4      | Exams and Student Progress Tracking Module | Quiz / Progress        | Create Exams, Track Results                |
+| 5      | Admin and Internal Staff Managing Module   | Staff / Admin          | Staff CRUD, Roles, Attendance              |
+| 6      | Learning Content Management Module         | Learning Content       | Create, View, Update Learning Content      |
