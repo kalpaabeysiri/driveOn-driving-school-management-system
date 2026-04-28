@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "DriveOn",
+    "slug": "drive-on-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.driveon.app",
+      "versionCode": 1
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow DriveOn to access your photos to upload receipts."
+        }
+      ],
+      "expo-font"
+    ]
+  }
+}
