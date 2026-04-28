@@ -13,6 +13,7 @@ const createInstructor = async (req, res) => {
 
   
   
+  
   try {
     const {
       fullName, NIC, dateOfBirth, address, city, gender,
