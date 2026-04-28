@@ -48,37 +48,56 @@ DriveOnApp/
 
 ## API Endpoints
 
-| Method | Endpoint                    | Access  | Description              |
-|--------|-----------------------------|---------|--------------------------|
-| POST   | /api/auth/register          | Public  | Register new user        |
-| POST   | /api/auth/login             | Public  | Login user               |
-| GET    | /api/auth/profile           | Private | Get profile              |
-| PUT    | /api/auth/profile           | Private | Update profile           |
-| GET    | /api/sessions               | Private | Get all/my sessions      |
-| POST   | /api/sessions               | Private | Book a session           |
-| PUT    | /api/sessions/:id           | Private | Update session           |
-| DELETE | /api/sessions/:id           | Private | Cancel session           |
-| GET    | /api/instructors            | Private | Get all instructors      |
-| POST   | /api/instructors            | Admin   | Add instructor           |
-| PUT    | /api/instructors/:id        | Admin   | Update instructor        |
-| DELETE | /api/instructors/:id        | Admin   | Delete instructor        |
-| GET    | /api/vehicles               | Private | Get all vehicles         |
-| POST   | /api/vehicles               | Admin   | Add vehicle              |
-| PUT    | /api/vehicles/:id           | Admin   | Update vehicle           |
-| DELETE | /api/vehicles/:id           | Admin   | Delete vehicle           |
-| GET    | /api/payments               | Private | Get all/my payments      |
-| POST   | /api/payments               | Private | Record payment           |
-| PUT    | /api/payments/:id           | Admin   | Update payment status    |
-| DELETE | /api/payments/:id           | Admin   | Delete payment           |
-| GET    | /api/quizzes                | Private | Get all quizzes          |
-| POST   | /api/quizzes                | Admin   | Create quiz              |
-| GET    | /api/quizzes/:id            | Private | Get single quiz          |
-| PUT    | /api/quizzes/:id            | Admin   | Update quiz              |
-| DELETE | /api/quizzes/:id            | Admin   | Delete quiz              |
-| GET    | /api/progress               | Private | Get my progress          |
-| POST   | /api/progress               | Private | Submit quiz result       |
-| GET    | /api/progress/quiz/:quizId  | Private | Get progress by quiz     |
-
+| Module         | Method | Endpoint                                         | Access      | Purpose                             |
+|----------------|--------|--------------------------------------------------|-------------|-------------------------------------|
+| Auth           | POST   | /api/auth/register                               | Public      | Register user                       |
+| Auth           | POST   | /api/auth/login                                  | Public      | User login                          |
+| Auth           | GET    | /api/auth/profile                                | Protected   | Get user profile                    |
+| Auth           | PUT    | /api/auth/profile                                | Protected   | Update user profile                 |
+| Students       | GET    | /api/students                                    | Admin       | Get all students                    |
+| Students       | POST   | /api/students                                    | Admin       | Add student                         |
+| Students       | GET    | /api/students/:id                                | Protected   | Get student by ID                   |
+| Students       | PUT    | /api/students/:id                                | Admin       | Update student                      |
+| Students       | DELETE | /api/students/:id                                | Admin       | Delete student                      |
+| Students       | PATCH  | /api/students/:id/status                         | Admin       | Update student status               |
+| Sessions       | GET    | /api/sessions                                    | Protected   | Get all sessions                    |
+| Sessions       | POST   | /api/sessions                                    | Admin       | Create session                      |
+| Sessions       | GET    | /api/sessions/available                          | Protected   | View available sessions             |
+| Sessions       | POST   | /api/sessions/:id/book                           | Protected   | Book session                        |
+| Sessions       | DELETE | /api/sessions/:id/book                           | Protected   | Cancel booking                      |
+| Instructors    | GET    | /api/instructors                                 | Protected   | Get instructors                     |
+| Instructors    | POST   | /api/instructors                                 | Admin       | Add instructor                      |
+| Instructors    | PUT    | /api/instructors/:id                             | Admin       | Update instructor                   |
+| Instructors    | DELETE | /api/instructors/:id                             | Admin       | Delete instructor                   |
+| Vehicles       | GET    | /api/vehicles                                    | Protected   | Get vehicles                        |
+| Vehicles       | POST   | /api/vehicles                                    | Admin       | Add vehicle                         |
+| Vehicles       | PUT    | /api/vehicles/:id                                | Admin       | Update vehicle                      |
+| Vehicles       | DELETE | /api/vehicles/:id                                | Admin       | Delete vehicle                      |
+| Payments       | GET    | /api/payments                                    | Protected   | View payments                       |
+| Payments       | POST   | /api/payments                                    | Protected   | Record payment                      |
+| Payments       | GET    | /api/payments/:id                                | Protected   | Get payment details                 |
+| Payments       | PUT    | /api/payments/:id                                | Protected   | Update payment                      |
+| Payments       | DELETE | /api/payments/:id                                | Protected   | Delete payment                      |
+| Quizzes        | GET    | /api/quizzes                                     | Protected   | View quizzes                        |
+| Quizzes        | POST   | /api/quizzes                                     | Admin       | Create quiz                         |
+| Quizzes        | PUT    | /api/quizzes/:id                                 | Admin       | Update quiz                         |
+| Quizzes        | DELETE | /api/quizzes/:id                                 | Admin       | Delete quiz                         |
+| Learning       | GET    | /api/learning/lessons                            | Protected   | Get lessons                         |
+| Learning       | POST   | /api/learning/lessons                            | Admin       | Add lesson                          |
+| Learning       | GET    | /api/learning/student/progress                   | Protected   | Track student progress              |
+| Exams          | GET    | /api/exams/theory                                | Protected   | View theory exams                   |
+| Exams          | POST   | /api/exams/theory                                | Admin       | Create theory exam                  |
+| Exams          | GET    | /api/exams/practical                             | Protected   | View practical exams                |
+| Exams          | POST   | /api/exams/practical                             | Admin       | Create practical exam               |
+| Attendance     | GET    | /api/attendance/session/:sessionId               | Admin       | Get session attendance              |
+| Attendance     | POST   | /api/attendance                                  | Admin       | Mark attendance                     |
+| Attendance     | GET    | /api/attendance/student/:studentId               | Protected   | View student attendance             |
+| Feedback       | GET    | /api/feedbacks                                   | Protected   | Get feedback                        |
+| Feedback       | POST   | /api/feedbacks                                   | Protected   | Submit feedback                     |
+| Inquiries      | GET    | /api/inquiries                                   | Protected   | View inquiries                      |
+| Inquiries      | POST   | /api/inquiries                                   | Protected   | Submit inquiry                      |
+| Notifications  | GET    | /api/notifications                               | Protected   | View notifications                  |
+| Notifications  | POST   | /api/notifications                               | Admin       | Send notifications                  |
 ---
 
 ## Setup Instructions
