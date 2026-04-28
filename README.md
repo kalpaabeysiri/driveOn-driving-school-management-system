@@ -303,11 +303,11 @@ Scan QR code with Expo Go app.
 
 ## Workload Distribution (6 Members)
 
-| Member | Module                                     | Entity                 | Focus Area                                 |
-|--------|--------------------------------------------|------------------------|--------------------------------------------|
-| 1      | Student Enrollment and Managing Module     |Student /Payment/Inquiry| CRUD operations + session reminder feature |
-| 2      | Session Management Module                  | Session                | Book, View, Cancel, Manage Sessions        |
-| 3      | Instructor and Vehicle Management Module   | Instructor / Vehicle   | CRUD + Image Upload                        |
-| 4      | Exams and Student Progress Tracking Module | Quiz / Progress        | Create Exams, Track Results                |
-| 5      | Admin and Internal Staff Managing Module   | Staff / Admin          | Staff CRUD, Roles, Attendance              |
-| 6      | Learning Content Management Module         | Learning Content       | Create, View, Update Learning Content      |
+| Member | Module                                   | Main Entities                                              | Focus Area                                                                 |
+|--------|------------------------------------------|------------------------------------------------------------|---------------------------------------------------------------------------|
+| 1      | Student Enrollment and Managing Module   | Student, User Profile, Booking, Payment, Inquiry, Reminder | Registration, booking, payments, attendance tracking, progress, reminders |
+| 2      | Session Management Module                | Session, Booking, Instructor Assignment, Vehicle Assignment, Feedback | Scheduling, capacity control, conflict prevention, feedback management |
+| 3      | Instructor and Vehicle Management Module | Instructor, Vehicle, Availability, Maintenance Record, Document Expiry | CRUD, image upload, availability, maintenance alerts, document tracking |
+| 4      | Exams and Student Progress Tracking Module | Theory Exam, Practical Exam, Exam Result, Progress, Eligibility | Exam creation, result tracking, eligibility validation, readiness monitoring |
+| 5      | Admin and Internal Staff Managing Module | Admin, Staff, Role, Staff Attendance, Course, Notice, Analytics | Staff CRUD, roles, attendance insights, course management, analytics |
+| 6      | Learning Content Management Module       | Lesson, Topic, Quiz, Question, Language, Quiz Result       | Learning content creation, multilingual quizzes, progress tracking       |
