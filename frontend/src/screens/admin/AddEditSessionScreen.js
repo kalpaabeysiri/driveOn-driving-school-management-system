@@ -769,6 +769,6 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: COLORS.white,
     fontWeight: '700',
-    fontSize: 16,
+    fontSize: 17,
   },
 });
