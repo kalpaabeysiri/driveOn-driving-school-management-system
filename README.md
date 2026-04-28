@@ -116,7 +116,7 @@ Edit `src/services/api.js`:
 export const BASE_URL = 'http://192.168.x.x:5000';
 
 // For deployed backend:
-export const BASE_URL = 'https://your-app.onrender.com';
+export const BASE_URL = 'https://your-app-production.up.railway.app';
 ```
 
 ```bash
@@ -129,7 +129,7 @@ Scan QR code with Expo Go app.
 ## Deployment (Render - Free)
 
 1. Push backend folder to GitHub
-2. Go to https://render.com → New Web Service
+2. Go to https://railway.com → New Web Service
 3. Connect your repo, set root directory to `backend`
 4. Set environment variables:
    - `MONGO_URI` = your MongoDB Atlas URI
