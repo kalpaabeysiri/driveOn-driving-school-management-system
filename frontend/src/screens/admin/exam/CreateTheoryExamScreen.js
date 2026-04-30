@@ -32,6 +32,7 @@ const CreateTheoryExamScreen = ({ navigation }) => {
   const [errors, setErrors] = useState({});
   const [showLanguagePicker, setShowLanguagePicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   
   // Date/Time picker states
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -43,6 +44,7 @@ const CreateTheoryExamScreen = ({ navigation }) => {
 
   const languages = ['English', 'Sinhala', 'Tamil'];
   const statuses = ['Scheduled', 'Completed', 'Cancelled'];
+  const locations = ['DMT Head Office - Colombo', 'DMT Kandy Branch', 'DMT Jaffna Branch', 'DMT Matara Branch'];
 
   const formatDate = (date) => {
     const d = new Date(date);
@@ -194,7 +196,11 @@ const CreateTheoryExamScreen = ({ navigation }) => {
       {options ? (
         <TouchableOpacity
           style={styles.pickerContainer}
-          onPress={() => field === 'language' ? setShowLanguagePicker(true) : setShowStatusPicker(true)}
+          onPress={() => {
+            if (field === 'language') setShowLanguagePicker(true);
+            else if (field === 'status') setShowStatusPicker(true);
+            else if (field === 'locationOrHall') setShowLocationPicker(true);
+          }}
         >
           <Text style={styles.pickerText}>{formData[field] || placeholder}</Text>
           <Ionicons name="chevron-down" size={16} color={COLORS.textMuted} />
@@ -284,7 +290,7 @@ const CreateTheoryExamScreen = ({ navigation }) => {
             {renderPicker('time', selectedEndTime, setSelectedEndTime, showEndTimePicker, setShowEndTimePicker)}
           </View>
           
-          {renderFormField('Location/Hall', 'locationOrHall', 'Enter location or hall')}
+          {renderFormField('Location/Hall', 'locationOrHall', 'Select location or hall', 'default', locations)}
           
           {renderFormField('Language', 'language', 'Select language', 'default', languages)}
           
@@ -326,6 +332,15 @@ const CreateTheoryExamScreen = ({ navigation }) => {
         options={statuses}
         title="Select Status"
         selectedValue={formData.status}
+      />
+
+      <SimplePicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={(locationOrHall) => setFormData({ ...formData, locationOrHall })}
+        options={locations}
+        title="Select Location"
+        selectedValue={formData.locationOrHall}
       />
     </View>
   );

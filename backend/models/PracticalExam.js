@@ -15,6 +15,7 @@ const practicalExamSchema = new mongoose.Schema({
   },
   trialLocation: {
     type: String,
+    enum: ['DMT Colombo Test Track', 'DMT Kandy Test Track', 'DMT Galle Test Track'],
     required: true,
     trim: true
   },
