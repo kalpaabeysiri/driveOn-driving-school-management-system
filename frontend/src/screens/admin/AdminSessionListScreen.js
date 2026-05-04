@@ -52,6 +52,29 @@ export default function AdminSessionListScreen({ navigation }) {
     ]);
   };
 
+  const handleMarkOngoing = (session) => {
+    if (session.status === 'Ongoing') return;
+
+    if (!session.enrolledStudents || session.enrolledStudents.length === 0) {
+      return Alert.alert('Error', 'No students booked yet. Cannot mark session as Ongoing.');
+    }
+
+    Alert.alert('Mark as Ongoing', 'Are you sure you want to mark this session as Ongoing? Students can then mark their attendance.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Mark Ongoing',
+        onPress: async () => {
+          try {
+            await updateSession(session._id, { status: 'Ongoing' });
+            fetchSessions();
+          } catch {
+            Alert.alert('Error', 'Could not update session status');
+          }
+        },
+      },
+    ]);
+  };
+
   const handleMarkCompleted = (session) => {
     if (session.status === 'Completed') return;
 
@@ -158,6 +181,15 @@ export default function AdminSessionListScreen({ navigation }) {
     <Ionicons name="trash-outline" size={18} color={COLORS.red} />
   </TouchableOpacity>
 </View>
+          {item.status !== 'Completed' && item.status !== 'Cancelled' && (
+            <TouchableOpacity
+              style={styles.ongoingBtn}
+              onPress={() => handleMarkOngoing(item)}
+            >
+              <Ionicons name="play-circle-outline" size={14} color={COLORS.brandOrange} />
+              <Text style={styles.ongoingBtnText}>Mark Ongoing</Text>
+            </TouchableOpacity>
+          )}
           {item.status !== 'Completed' && (
             <TouchableOpacity
               style={styles.completeBtn}
@@ -281,6 +313,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   completeBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.green },
+  ongoingBtn: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderColor: COLORS.brandOrange,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  ongoingBtnText: { fontSize: 10, fontWeight: '700', color: COLORS.brandOrange },
   cancelStatusBtn: {
     marginTop: 4,
     flexDirection: 'row',

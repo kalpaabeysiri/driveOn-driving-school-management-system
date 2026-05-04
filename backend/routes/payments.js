@@ -1,26 +1,18 @@
 const express = require('express');
 const router = express.Router();
-
 const {
-  createPayment,
-  getPayments,
-  getPaymentById,
-  updatePayment,
-  deletePayment,
+  createPayment, getPayments, getPaymentById, updatePayment, deletePayment,
 } = require('../controllers/paymentController');
-
-const { protect } = require('../middleware/auth');
+const { protect, adminOnly } = require('../middleware/auth');
 const upload = require('../middleware/upload');
 
-router
-  .route('/')
+router.route('/')
   .get(protect, getPayments)
   .post(protect, upload.single('receipt'), createPayment);
 
-router
-  .route('/:id')
+router.route('/:id')
   .get(protect, getPaymentById)
-  .put(protect, upload.single('receipt'), updatePayment)
-  .delete(protect, deletePayment);
+  .put(protect, adminOnly, updatePayment)
+  .delete(protect, adminOnly, deletePayment);
 
 module.exports = router;

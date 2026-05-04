@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView,
-  Platform,
+  Platform, Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { COLORS } from '../../../theme';
 import {
   getVideoTutorials,
   createVideoTutorial,
+  updateVideoTutorial,
   deleteVideoTutorial,
   getLearningQuizzes,
   deleteLearningQuiz,
@@ -33,6 +34,7 @@ export default function AdminLessonDetailScreen({ route, navigation }) {
 
   // video modal
   const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [editingVideo, setEditingVideo] = useState(null);
   const [videoForm, setVideoForm] = useState({ title: '', description: '', videoUrl: '', duration: '0', status: 'Active' });
   const [pickedVideo, setPickedVideo] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -58,9 +60,29 @@ export default function AdminLessonDetailScreen({ route, navigation }) {
   useEffect(() => { load(); }, [load]);
 
   const openAddVideo = () => {
+    setEditingVideo(null);
     setPickedVideo(null);
     setVideoForm({ title: '', description: '', videoUrl: '', duration: '0', status: 'Active' });
     setVideoModalOpen(true);
+  };
+
+  const openEditVideo = (video) => {
+    setEditingVideo(video);
+    setPickedVideo(null);
+    setVideoForm({
+      title: video.title || '',
+      description: video.description || '',
+      videoUrl: video.videoUrl || '',
+      duration: String(video.duration ?? 0),
+      status: video.status || 'Active',
+    });
+    setVideoModalOpen(true);
+  };
+
+  const viewVideo = (video) => {
+    const url = video.videoUrl;
+    if (!url) return Alert.alert('No URL', 'This video has no external URL. It was uploaded as a file.');
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'Could not open video URL'));
   };
 
   const pickVideo = async () => {
@@ -85,23 +107,26 @@ export default function AdminLessonDetailScreen({ route, navigation }) {
 
   const submitVideo = async () => {
     if (!videoForm.title.trim()) return Alert.alert('Error', 'Video title is required');
-    if (!pickedVideo && !videoForm.videoUrl.trim()) return Alert.alert('Error', 'Provide a video URL or upload a file');
+    if (!editingVideo && !pickedVideo && !videoForm.videoUrl.trim()) return Alert.alert('Error', 'Provide a video URL or upload a file');
     if (!lessonId) return Alert.alert('Error', 'Lesson ID is required');
 
     try {
       setUploading(true);
-      await createVideoTutorial(
-        {
-          title: videoForm.title.trim(),
-          description: videoForm.description.trim(),
-          videoUrl: videoForm.videoUrl.trim() || undefined,
-          duration: parseInt(videoForm.duration || '0', 10),
-          status: videoForm.status,
-          lesson: lessonId,
-        },
-        pickedVideo
-      );
+      const payload = {
+        title: videoForm.title.trim(),
+        description: videoForm.description.trim(),
+        videoUrl: videoForm.videoUrl.trim() || undefined,
+        duration: parseInt(videoForm.duration || '0', 10),
+        status: videoForm.status,
+        lesson: lessonId,
+      };
+      if (editingVideo) {
+        await updateVideoTutorial(editingVideo._id, payload, pickedVideo || undefined);
+      } else {
+        await createVideoTutorial(payload, pickedVideo);
+      }
       setVideoModalOpen(false);
+      setEditingVideo(null);
       load();
     } catch (err) {
       Alert.alert('Error', err.response?.data?.message || 'Could not save video tutorial');
@@ -172,9 +197,17 @@ export default function AdminLessonDetailScreen({ route, navigation }) {
                   {v.status} · {v.duration || 0}s · {v.videoUrl ? 'URL' : 'Upload'}
                 </Text>
               </View>
-              <TouchableOpacity style={styles.iconBtn} onPress={() => confirmDeleteVideo(v)}>
-                <Ionicons name="trash-outline" size={18} color={COLORS.red} />
-              </TouchableOpacity>
+              <View style={styles.cardActions}>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => viewVideo(v)}>
+                  <Ionicons name="play-circle-outline" size={18} color={COLORS.blue} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => openEditVideo(v)}>
+                  <Ionicons name="create-outline" size={18} color={COLORS.brandOrange} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.iconBtn} onPress={() => confirmDeleteVideo(v)}>
+                  <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+                </TouchableOpacity>
+              </View>
             </View>
           ))
         )}
@@ -228,7 +261,7 @@ export default function AdminLessonDetailScreen({ route, navigation }) {
             style={styles.keyboardAvoid}
           >
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>Add Video Tutorial</Text>
+              <Text style={styles.modalTitle}>{editingVideo ? 'Edit Video Tutorial' : 'Add Video Tutorial'}</Text>
 
               <Text style={styles.label}>Title *</Text>
               <TextInput style={styles.input} value={videoForm.title} onChangeText={(v) => setVideoForm((p) => ({ ...p, title: v }))} />
@@ -318,6 +351,7 @@ const styles = StyleSheet.create({
   itemMeta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
   flex1: { flex: 1 },
   iconBtn: { padding: 8, borderRadius: 10, backgroundColor: COLORS.bgLight },
+  cardActions: { gap: 6, alignItems: 'flex-end' },
 
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   keyboardAvoid: { flex: 1, justifyContent: 'flex-end' },

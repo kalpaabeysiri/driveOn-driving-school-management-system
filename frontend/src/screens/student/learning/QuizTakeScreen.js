@@ -6,16 +6,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS } from '../../../theme';
-import { getLearningQuizById, submitLearningQuizAttempt } from '../../../services/learningApi';
+import { getLearningQuizById, submitLearningQuizAttempt, startLearningQuizAttempt } from '../../../services/learningApi';
 
 export default function QuizTakeScreen({ route, navigation }) {
-  const { quizId, attemptId } = route.params || {};
+  const { quizId } = route.params || {};
 
   const [quiz, setQuiz] = useState(null);
   const [loading, setLoading] = useState(true);
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState([]);
+  const [attemptId, setAttemptId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [language, setLanguage] = useState('en'); // 'en' or 'si' (sinhala)
 
   // Validate required params
   React.useEffect(() => {
@@ -29,11 +31,17 @@ export default function QuizTakeScreen({ route, navigation }) {
     const load = async () => {
       if (!quizId) return;
       try {
+        // Start quiz attempt first to get attemptId
+        const attemptRes = await startLearningQuizAttempt(quizId);
+        const attemptData = attemptRes.data;
+        setAttemptId(attemptData.attemptId);
+        
+        // Then fetch quiz details
         const { data } = await getLearningQuizById(quizId);
         setQuiz(data);
         setAnswers((data.questions || []).map(() => null));
-      } catch {
-        Alert.alert('Error', 'Could not load quiz');
+      } catch (e) {
+        Alert.alert('Error', e.response?.data?.message || 'Could not load quiz');
         navigation.goBack();
       } finally {
         setLoading(false);
@@ -63,7 +71,25 @@ export default function QuizTakeScreen({ route, navigation }) {
     if (currentQ > 0) setCurrentQ(currentQ - 1);
   };
 
+  const getQuestionText = (q) => {
+    if (language === 'si' && q.sinhalaText?.trim()) {
+      return q.sinhalaText;
+    }
+    return q.questionText;
+  };
+
+  const getOptionText = (opt) => {
+    if (language === 'si' && opt.sinhalaText?.trim()) {
+      return opt.sinhalaText;
+    }
+    return opt.optionText;
+  };
+
   const finish = async () => {
+    if (!attemptId) {
+      Alert.alert('Error', 'Quiz attempt not started');
+      return;
+    }
     try {
       setSubmitting(true);
       const payload = {
@@ -92,7 +118,22 @@ export default function QuizTakeScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={20} color={COLORS.black} />
           <Text style={styles.backText}>Exit</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{quiz.title}</Text>
+        
+        {/* Language Toggle */}
+        <View style={styles.langToggleContainer}>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+            onPress={() => setLanguage('en')}
+          >
+            <Text style={[styles.langBtnText, language === 'en' && styles.langBtnTextActive]}>EN</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.langBtn, language === 'si' && styles.langBtnActive]}
+            onPress={() => setLanguage('si')}
+          >
+            <Text style={[styles.langBtnText, language === 'si' && styles.langBtnTextActive]}>සිං</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.progressRow}>
           <Text style={styles.progressText}>Q {currentQ + 1} / {totalQ}</Text>
           <Text style={styles.progressPct}>{Math.round(((currentQ + 1) / totalQ) * 100)}%</Text>
@@ -103,7 +144,7 @@ export default function QuizTakeScreen({ route, navigation }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.quizContent}>
-        <Text style={styles.questionText}>{question.questionText}</Text>
+        <Text style={styles.questionText}>{getQuestionText(question)}</Text>
 
         {(question.options || []).map((opt) => {
           const isSelected = selectedOptionId === opt._id;
@@ -119,7 +160,7 @@ export default function QuizTakeScreen({ route, navigation }) {
                   {isSelected ? '✓' : ''}
                 </Text>
               </View>
-              <Text style={styles.optionText}>{opt.optionText}</Text>
+              <Text style={styles.optionText}>{getOptionText(opt)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -162,6 +203,11 @@ const styles = StyleSheet.create({
   },
   backRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   backText: { fontSize: 14, fontWeight: '600', color: COLORS.black },
+  langToggleContainer: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  langBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, backgroundColor: COLORS.white },
+  langBtnActive: { backgroundColor: COLORS.brandOrange, borderColor: COLORS.brandOrange },
+  langBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted },
+  langBtnTextActive: { color: COLORS.white },
   headerTitle: { fontSize: 17, fontWeight: '800', color: COLORS.black, marginBottom: 10 },
   progressRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   progressText: { fontSize: 12, color: COLORS.textMuted },

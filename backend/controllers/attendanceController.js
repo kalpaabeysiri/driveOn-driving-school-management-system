@@ -2,6 +2,96 @@ const Attendance = require('../models/Attendance');
 const Session    = require('../models/Session');
 const Student    = require('../models/Student');
 
+// ── STUDENT SELF-MARK ATTENDANCE ───────────────────────────────────────────────
+// @route POST /api/attendance/self-mark
+// Student marks their own attendance (only when session is Ongoing)
+const selfMarkAttendance = async (req, res) => {
+  try {
+    const { sessionId, status } = req.body;
+    const studentId = req.user.id;
+
+    if (!sessionId || !status) {
+      return res.status(400).json({ message: 'sessionId and status are required' });
+    }
+
+    const session = await Session.findById(sessionId);
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    // Only allow self-mark when session is Ongoing
+    if (session.status !== 'Ongoing') {
+      return res.status(400).json({ message: 'Can only mark attendance when session is Ongoing' });
+    }
+
+    // Check if student is enrolled
+    const isEnrolled = session.enrolledStudents.some(id => id.toString() === studentId);
+    if (!isEnrolled) {
+      return res.status(403).json({ message: 'You are not enrolled in this session' });
+    }
+
+    // Check if already marked
+    const existing = await Attendance.findOne({ session: sessionId, student: studentId });
+    if (existing && existing.confirmed) {
+      return res.status(400).json({ message: 'Attendance already confirmed by instructor' });
+    }
+
+    const record = await Attendance.findOneAndUpdate(
+      { session: sessionId, student: studentId },
+      {
+        status,
+        selfMarked: true,
+        markedBy: studentId,
+        markedByRole: 'student',
+        markedAt: new Date(),
+      },
+      { upsert: true, new: true }
+    ).populate('student', 'firstName lastName');
+
+    res.json({ message: 'Attendance marked successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── INSTRUCTOR CONFIRM ATTENDANCE ──────────────────────────────────────────────
+// @route POST /api/attendance/confirm
+// Instructor confirms student attendance for their assigned session
+const confirmAttendance = async (req, res) => {
+  try {
+    const { sessionId, studentId } = req.body;
+    const instructorId = req.user.id;
+
+    if (!sessionId || !studentId) {
+      return res.status(400).json({ message: 'sessionId and studentId are required' });
+    }
+
+    const session = await Session.findById(sessionId);
+    if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    // Check if this instructor is assigned to the session
+    if (session.instructor.toString() !== instructorId) {
+      return res.status(403).json({ message: 'You are not assigned to this session' });
+    }
+
+    const record = await Attendance.findOne({ session: sessionId, student: studentId });
+    if (!record) {
+      return res.status(404).json({ message: 'Attendance record not found' });
+    }
+
+    if (record.confirmed) {
+      return res.status(400).json({ message: 'Attendance already confirmed' });
+    }
+
+    record.confirmed = true;
+    record.confirmedBy = instructorId;
+    record.confirmedAt = new Date();
+    await record.save();
+
+    res.json({ message: 'Attendance confirmed successfully', record });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // ── MARK ATTENDANCE (Admin) ───────────────────────────────────────────────────
 // @route POST /api/attendance
 // Mark attendance for multiple students at once for a session
@@ -34,13 +124,20 @@ const markAttendance = async (req, res) => {
   }
 };
 
-// ── GET ATTENDANCE FOR A SESSION (Admin) ──────────────────────────────────────
+// ── GET ATTENDANCE FOR A SESSION (Admin + Instructor) ──────────────────────────────
 // @route GET /api/attendance/session/:sessionId
 const getSessionAttendance = async (req, res) => {
   try {
     const session = await Session.findById(req.params.sessionId)
       .populate('enrolledStudents', 'firstName lastName NIC contactNo email');
     if (!session) return res.status(404).json({ message: 'Session not found' });
+
+    // If user is instructor, check if they're assigned to this session
+    if (req.user.role === 'instructor') {
+      if (session.instructor.toString() !== req.user.id) {
+        return res.status(403).json({ message: 'Not authorized to view this session' });
+      }
+    }
 
     const attendanceRecords = await Attendance.find({ session: req.params.sessionId })
       .populate('student', 'firstName lastName NIC contactNo')
@@ -254,7 +351,23 @@ const getStudentProgress = async (req, res) => {
   }
 };
 
+// ── DELETE ATTENDANCE (Admin) ─────────────────────────────────────────────────────
+// @route DELETE /api/attendance/:id
+const deleteAttendance = async (req, res) => {
+  try {
+    const attendance = await Attendance.findById(req.params.id);
+    if (!attendance) return res.status(404).json({ message: 'Attendance record not found' });
+
+    await Attendance.findByIdAndDelete(req.params.id);
+
+    res.json({ message: 'Attendance deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   markAttendance, getSessionAttendance, getStudentAttendance,
   updateAttendance, getAnalytics, getStudentProgress,
+  selfMarkAttendance, confirmAttendance, deleteAttendance,
 };

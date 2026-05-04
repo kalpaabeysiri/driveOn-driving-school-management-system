@@ -8,12 +8,7 @@ const generateToken = (instructor) =>
 
 // ── CREATE ───────────────────────────────────────────────────────────────────
 // @route POST /api/instructors
-
 const createInstructor = async (req, res) => {
-
-  
-  
-  
   try {
     const {
       fullName, NIC, dateOfBirth, address, city, gender,

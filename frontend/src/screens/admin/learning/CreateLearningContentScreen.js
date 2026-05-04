@@ -50,18 +50,18 @@ export default function CreateLearningContentScreen({ navigation }) {
     {
       id: 'quiz',
       title: 'Create Quiz',
-      description: 'Select a topic → lesson, then build a quiz',
+      description: 'Pick a lesson directly and build or manage its quizzes',
       icon: 'help-circle-outline',
       color: COLORS.brandOrange,
-      screen: 'AdminTopics',
+      screen: 'AdminQuizLessons',
     },
     {
       id: 'video',
       title: 'Upload Video',
-      description: 'Select a topic → lesson, then upload a video',
+      description: 'Pick a lesson directly and upload a video tutorial',
       icon: 'videocam-outline',
       color: COLORS.red,
-      screen: 'AdminTopics',
+      screen: 'AdminVideoUpload',
     },
     {
       id: 'material',

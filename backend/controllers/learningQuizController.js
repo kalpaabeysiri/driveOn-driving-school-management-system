@@ -16,7 +16,7 @@ function validateQuestions(questions) {
 const createQuiz = async (req, res) => {
   try {
     const {
-      title, description, passMark, timeLimit, attemptLimit, status, lesson, questions,
+      title, description, passMark, timeLimit, attemptLimit, status, lesson, questions, language,
     } = req.body;
 
     if (!title) {
@@ -33,6 +33,7 @@ const createQuiz = async (req, res) => {
       timeLimit: timeLimit ?? 0,
       attemptLimit: attemptLimit ?? 1,
       status: status ?? 'Draft',
+      language: language ?? 'en',
       questions,
       createdBy: req.user.id,
     };
@@ -54,10 +55,18 @@ const createQuiz = async (req, res) => {
 // @route  GET /api/learning/quizzes
 const getQuizzes = async (req, res) => {
   try {
-    const { lesson, status } = req.query;
+    const { lesson, status, language } = req.query;
     const filter = {};
     if (lesson) filter.lesson = lesson;
     if (status) filter.status = status;
+    // Language filter: if specified, match either exact language, 'both', or null/undefined (defaults to English)
+    if (language) {
+      filter.$or = [
+        { language: language },
+        { language: 'both' },
+        ...(language === 'en' ? [{ language: null }, { language: { $exists: false } }] : []),
+      ];
+    }
 
     const quizzes = await LearningQuiz.find(filter)
       .populate('lesson', 'title status')
@@ -106,7 +115,7 @@ const updateQuiz = async (req, res) => {
     if (!quiz) return res.status(404).json({ message: 'Quiz not found' });
 
     const allowedFields = [
-      'title', 'description', 'passMark', 'timeLimit', 'attemptLimit', 'status', 'lesson',
+      'title', 'description', 'passMark', 'timeLimit', 'attemptLimit', 'status', 'lesson', 'language',
     ];
     allowedFields.forEach((f) => {
       if (req.body[f] !== undefined) quiz[f] = req.body[f];
@@ -139,4 +148,27 @@ const deleteQuiz = async (req, res) => {
   }
 };
 
-module.exports = { createQuiz, getQuizzes, getQuizById, updateQuiz, deleteQuiz };
+// @desc   Delete all quizzes by lesson (Admin)
+// @route  DELETE /api/learning/quizzes/all/:lessonId
+const deleteAllQuizzes = async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const result = await LearningQuiz.deleteMany({ lesson: lessonId });
+    res.json({ message: 'All quizzes deleted', deletedCount: result.deletedCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc   Delete ALL quizzes in system (Admin) - DANGER
+// @route  DELETE /api/learning/quizzes/delete-all
+const deleteAllQuizzesGlobal = async (req, res) => {
+  try {
+    const result = await LearningQuiz.deleteMany({});
+    res.json({ message: 'All quizzes deleted from system', deletedCount: result.deletedCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { createQuiz, getQuizzes, getQuizById, updateQuiz, deleteQuiz, deleteAllQuizzes, deleteAllQuizzesGlobal };

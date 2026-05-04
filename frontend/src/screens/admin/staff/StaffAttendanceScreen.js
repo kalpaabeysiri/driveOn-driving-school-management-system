@@ -1,529 +1,211 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  ActivityIndicator,
-  ScrollView,
-  RefreshControl,
+  Modal,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { getStaffAttendance, getStaff, markStaffAttendance } from '../../../services/api';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-
-import {
-  getAttendanceMembers,
-  getStaffAttendance,
-  markStaffAttendance,
-} from '../../../services/api';
-
 import { COLORS } from '../../../theme';
 
 const StaffAttendanceScreen = ({ navigation }) => {
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [showDatePicker, setShowDatePicker] = useState(false);
-
-  const [staffAttendance, setStaffAttendance] = useState([]);
-  const [instructorAttendance, setInstructorAttendance] = useState([]);
-
+  const [staffMembers, setStaffMembers] = useState([]);
+  const [attendance, setAttendance] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [generatingReport, setGeneratingReport] = useState(false);
+  const [showMarkModal, setShowMarkModal] = useState(false);
+  const [selectedStaff, setSelectedStaff] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [status, setStatus] = useState('Present');
+  const [checkIn, setCheckIn] = useState(null);
+  const [checkOut, setCheckOut] = useState(null);
+  const [showCheckInPicker, setShowCheckInPicker] = useState(false);
+  const [showCheckOutPicker, setShowCheckOutPicker] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const formatDate = date => {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const mon = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${mon}-${day}`;
-  };
+  const attendanceStatuses = ['Present', 'Absent', 'Late', 'Half Day', 'On Leave'];
 
-  const getPersonName = person => {
-    return person?.fullName || person?.name || 'N/A';
-  };
+  useEffect(() => {
+    loadData();
+  }, [currentMonth]);
 
-  const getInstructorId = instructor => {
-    return instructor?.licenseNo || instructor?._id || 'N/A';
-  };
-
-  const loadAttendance = useCallback(async () => {
+  const loadData = async () => {
     try {
-      const date = formatDate(selectedDate);
-
-      const [membersResponse, attendanceResponse] = await Promise.all([
-        getAttendanceMembers(),
-        getStaffAttendance({ date }),
+      const [staffRes, attendanceRes] = await Promise.all([
+        getStaff(),
+        getStaffAttendance({
+          month: currentMonth.getMonth() + 1,
+          year: currentMonth.getFullYear()
+        })
       ]);
-
-      const membersData = membersResponse.data;
-      const attendanceData = attendanceResponse.data;
-
-      const allStaff = membersData.staff || [];
-      const allInstructors = membersData.instructors || [];
-
-      const savedStaffAttendance = attendanceData.staffAttendance || [];
-      const savedInstructorAttendance = attendanceData.instructorAttendance || [];
-
-      const preparedStaffAttendance = allStaff.map(staff => {
-        const existing = savedStaffAttendance.find(item => {
-          const savedStaffId = item.staff?._id || item.staff;
-          return savedStaffId === staff._id;
-        });
-
-        return {
-          staff,
-          attended: existing ? Boolean(existing.attended) : false,
-        };
-      });
-
-      const preparedInstructorAttendance = allInstructors.map(instructor => {
-        const existing = savedInstructorAttendance.find(item => {
-          const savedInstructorId = item.instructor?._id || item.instructor;
-          return savedInstructorId === instructor._id;
-        });
-
-        return {
-          instructor,
-          attended: existing ? Boolean(existing.attended) : false,
-        };
-      });
-
-      setStaffAttendance(preparedStaffAttendance);
-      setInstructorAttendance(preparedInstructorAttendance);
+      setStaffMembers(staffRes.data.staff || []);
+      setAttendance(attendanceRes.data.attendance || []);
     } catch (error) {
-      console.error('Load attendance error:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Failed to load attendance data'
-      );
+      Alert.alert('Error', 'Failed to load data');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedDate]);
-
-  useEffect(() => {
-    loadAttendance();
-  }, [loadAttendance]);
-
-  const handleDateChange = (event, date) => {
-    if (Platform.OS === 'android') {
-      setShowDatePicker(false);
-    }
-
-    if (date) {
-      setSelectedDate(date);
-    }
   };
 
-  const toggleStaffAttendance = staffId => {
-    setStaffAttendance(prev =>
-      prev.map(item => {
-        const currentStaffId = item.staff?._id || item.staff;
-
-        if (currentStaffId === staffId) {
-          return {
-            ...item,
-            attended: !item.attended,
-          };
-        }
-
-        return item;
-      })
+  const getAttendanceForDate = (staffId, date) => {
+    return attendance.find(a => 
+      a.staff?._id === staffId && 
+      new Date(a.date).toDateString() === date.toDateString()
     );
   };
 
-  const toggleInstructorAttendance = instructorId => {
-    setInstructorAttendance(prev =>
-      prev.map(item => {
-        const currentInstructorId = item.instructor?._id || item.instructor;
-
-        if (currentInstructorId === instructorId) {
-          return {
-            ...item,
-            attended: !item.attended,
-          };
-        }
-
-        return item;
-      })
-    );
+  const handleDateClick = (staffMember, date) => {
+    const existing = getAttendanceForDate(staffMember._id, date);
+    setSelectedStaff(staffMember);
+    setSelectedDate(date);
+    if (existing) {
+      setStatus(existing.status);
+      setCheckIn(existing.checkIn ? new Date(existing.checkIn) : null);
+      setCheckOut(existing.checkOut ? new Date(existing.checkOut) : null);
+    } else {
+      setStatus('Present');
+      setCheckIn(null);
+      setCheckOut(null);
+    }
+    setShowMarkModal(true);
   };
 
-  const handleSubmitAttendance = async () => {
+  const formatLocalDate = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const formatTime = (date) => {
+    if (!date) return '';
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+
+  const submitAttendance = async () => {
+    const requiresCheckIn = ['Late', 'Half Day'].includes(status);
+    if (requiresCheckIn && !checkIn) {
+      Alert.alert('Error', 'Check-in time is required for this status');
+      return;
+    }
+    setSubmitting(true);
     try {
-      setSaving(true);
-
-      const payload = {
-        date: formatDate(selectedDate),
-
-        staffAttendance: staffAttendance.map(item => ({
-          staffId: item.staff?._id || item.staff,
-          attended: Boolean(item.attended),
-        })),
-
-        instructorAttendance: instructorAttendance.map(item => ({
-          instructorId: item.instructor?._id || item.instructor,
-          attended: Boolean(item.attended),
-        })),
+      const dateStr = formatLocalDate(selectedDate);
+      const attendanceData = {
+        staffId: selectedStaff._id,
+        date: dateStr,
+        status,
       };
-
-      await markStaffAttendance(payload);
-
-      Alert.alert('Success', 'Attendance saved successfully');
-      loadAttendance();
-    } catch (error) {
-      console.error('Save attendance error:', error);
-      Alert.alert(
-        'Error',
-        error.response?.data?.message || 'Failed to save attendance'
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const generateReportHtml = () => {
-    const date = formatDate(selectedDate);
-
-    const totalStaff = staffAttendance.length;
-    const presentStaff = staffAttendance.filter(item => item.attended).length;
-    const absentStaff = totalStaff - presentStaff;
-
-    const totalInstructors = instructorAttendance.length;
-    const presentInstructors = instructorAttendance.filter(item => item.attended).length;
-    const absentInstructors = totalInstructors - presentInstructors;
-
-    const staffRows = staffAttendance
-      .map((item, index) => {
-        const staff = item.staff;
-
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${staff?.employeeId || 'N/A'}</td>
-            <td>${getPersonName(staff)}</td>
-            <td>${staff?.position || 'N/A'}</td>
-            <td class="${item.attended ? 'present' : 'absent'}">
-              ${item.attended ? 'Present' : 'Absent'}
-            </td>
-          </tr>
-        `;
-      })
-      .join('');
-
-    const instructorRows = instructorAttendance
-      .map((item, index) => {
-        const instructor = item.instructor;
-
-        return `
-          <tr>
-            <td>${index + 1}</td>
-            <td>${getInstructorId(instructor)}</td>
-            <td>${getPersonName(instructor)}</td>
-            <td>${instructor?.contactNumber || 'N/A'}</td>
-            <td class="${item.attended ? 'present' : 'absent'}">
-              ${item.attended ? 'Present' : 'Absent'}
-            </td>
-          </tr>
-        `;
-      })
-      .join('');
-
-    return `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <meta charset="UTF-8" />
-          <style>
-            body {
-              font-family: Arial, sans-serif;
-              padding: 24px;
-              color: #222;
-            }
-
-            h1 {
-              text-align: center;
-              margin-bottom: 4px;
-            }
-
-            .date {
-              text-align: center;
-              color: #666;
-              margin-bottom: 24px;
-            }
-
-            .summary {
-              display: flex;
-              justify-content: space-between;
-              margin-bottom: 24px;
-            }
-
-            .summary-card {
-              border: 1px solid #ddd;
-              border-radius: 8px;
-              padding: 12px;
-              width: 48%;
-            }
-
-            .summary-card h3 {
-              margin: 0 0 8px 0;
-            }
-
-            table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 28px;
-            }
-
-            th {
-              background-color: #f2f2f2;
-              text-align: left;
-            }
-
-            th, td {
-              border: 1px solid #ddd;
-              padding: 10px;
-              font-size: 13px;
-            }
-
-            .section-title {
-              margin-top: 24px;
-              margin-bottom: 8px;
-              font-size: 18px;
-              font-weight: bold;
-            }
-
-            .present {
-              color: #0a8f3c;
-              font-weight: bold;
-            }
-
-            .absent {
-              color: #d32f2f;
-              font-weight: bold;
-            }
-
-            .footer {
-              margin-top: 30px;
-              font-size: 12px;
-              color: #777;
-              text-align: center;
-            }
-          </style>
-        </head>
-
-        <body>
-          <h1>Daily Attendance Report</h1>
-          <div class="date">Date: ${date}</div>
-
-          <div class="summary">
-            <div class="summary-card">
-              <h3>Staff Summary</h3>
-              <p>Total Staff: ${totalStaff}</p>
-              <p>Present: ${presentStaff}</p>
-              <p>Absent: ${absentStaff}</p>
-            </div>
-
-            <div class="summary-card">
-              <h3>Instructor Summary</h3>
-              <p>Total Instructors: ${totalInstructors}</p>
-              <p>Present: ${presentInstructors}</p>
-              <p>Absent: ${absentInstructors}</p>
-            </div>
-          </div>
-
-          <div class="section-title">Staff Attendance</div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Staff ID</th>
-                <th>Name</th>
-                <th>Position</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${
-                staffRows ||
-                `<tr><td colspan="5" style="text-align:center;">No staff records found</td></tr>`
-              }
-            </tbody>
-          </table>
-
-          <div class="section-title">Instructor Attendance</div>
-          <table>
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>License No</th>
-                <th>Name</th>
-                <th>Contact Number</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${
-                instructorRows ||
-                `<tr><td colspan="5" style="text-align:center;">No instructor records found</td></tr>`
-              }
-            </tbody>
-          </table>
-
-          <div class="footer">
-            Generated by DriveOn Driving School Management System
-          </div>
-        </body>
-      </html>
-    `;
-  };
-
-  const handleGenerateReport = async () => {
-    try {
-      setGeneratingReport(true);
-
-      const html = generateReportHtml();
-
-      const file = await Print.printToFileAsync({
-        html,
-        base64: false,
-      });
-
-      const canShare = await Sharing.isAvailableAsync();
-
-      if (!canShare) {
-        Alert.alert('Report Generated', `PDF file created: ${file.uri}`);
-        return;
+      if (checkIn) {
+        const h = String(checkIn.getHours()).padStart(2, '0');
+        const m = String(checkIn.getMinutes()).padStart(2, '0');
+        attendanceData.checkIn = `${dateStr}T${h}:${m}:00`;
       }
-
-      await Sharing.shareAsync(file.uri, {
-        mimeType: 'application/pdf',
-        dialogTitle: `Attendance Report - ${formatDate(selectedDate)}`,
-        UTI: 'com.adobe.pdf',
-      });
+      if (checkOut) {
+        const h = String(checkOut.getHours()).padStart(2, '0');
+        const m = String(checkOut.getMinutes()).padStart(2, '0');
+        attendanceData.checkOut = `${dateStr}T${h}:${m}:00`;
+      }
+      await markStaffAttendance(attendanceData);
+      Alert.alert('Success', 'Attendance marked successfully');
+      setShowMarkModal(false);
+      loadData();
     } catch (error) {
-      console.error('Generate report error:', error);
-      Alert.alert('Error', 'Failed to generate attendance report');
+      Alert.alert('Error', error.response?.data?.message || 'Failed to mark attendance');
     } finally {
-      setGeneratingReport(false);
+      setSubmitting(false);
     }
   };
 
-  const renderDatePicker = () => {
-    if (!showDatePicker) return null;
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Present': return COLORS.green;
+      case 'Absent': return COLORS.red;
+      case 'Late': return COLORS.brandOrange;
+      case 'Half Day': return COLORS.blue;
+      case 'On Leave': return COLORS.purple;
+      default: return COLORS.gray;
+    }
+  };
+
+  const generateCalendarDays = () => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    const startPadding = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+    
+    const days = [];
+    for (let i = 0; i < startPadding; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
+  };
+
+  const CalendarGrid = ({ staffMember }) => {
+    const days = generateCalendarDays();
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
     return (
-      <DateTimePicker
-        value={selectedDate}
-        mode="date"
-        display={Platform.OS === 'ios' ? 'spinner' : 'calendar'}
-        onChange={handleDateChange}
-      />
+      <View style={styles.calendarContainer}>
+        <View style={styles.calendarHeader}>
+          {dayNames.map(day => (
+            <Text key={day} style={styles.dayName}>{day}</Text>
+          ))}
+        </View>
+        <View style={styles.calendarGrid}>
+          {days.map((date, index) => {
+            if (!date) {
+              return <View key={index} style={styles.calendarCellEmpty} />;
+            }
+            const attendance = getAttendanceForDate(staffMember._id, date);
+            const isToday = new Date().toDateString() === date.toDateString();
+            const isFuture = date > new Date();
+
+            return (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.calendarCell,
+                  isToday && styles.calendarCellToday,
+                  isFuture && styles.calendarCellFuture,
+                  attendance && { backgroundColor: getStatusColor(attendance.status) + '20' }
+                ]}
+                onPress={() => !isFuture && handleDateClick(staffMember, date)}
+                disabled={isFuture}
+              >
+                <Text style={[
+                  styles.calendarCellText,
+                  isToday && styles.calendarCellTextToday,
+                  isFuture && styles.calendarCellTextFuture
+                ]}>
+                  {date.getDate()}
+                </Text>
+                {attendance && (
+                  <View style={[styles.attendanceDot, { backgroundColor: getStatusColor(attendance.status) }]} />
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
     );
   };
-
-  const renderCheckBox = checked => (
-    <View style={[styles.checkBox, checked && styles.checkBoxActive]}>
-      {checked && (
-        <Ionicons name="checkmark" size={18} color={COLORS.white} />
-      )}
-    </View>
-  );
-
-  const renderStaffTable = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Staff Attendance</Text>
-
-      <View style={styles.tableCard}>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, styles.idColumn]}>Staff ID</Text>
-          <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
-          <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
-        </View>
-
-        {staffAttendance.length === 0 ? (
-          <View style={styles.emptyRow}>
-            <Text style={styles.emptyText}>No staff members found</Text>
-          </View>
-        ) : (
-          staffAttendance.map(item => {
-            const staff = item.staff;
-            const staffId = staff?._id || staff;
-
-            return (
-              <View key={staffId} style={styles.tableRow}>
-                <Text style={[styles.rowText, styles.idColumn]}>
-                  {staff?.employeeId || 'N/A'}
-                </Text>
-
-                <Text style={[styles.rowText, styles.nameColumn]}>
-                  {getPersonName(staff)}
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.attendedColumn}
-                  onPress={() => toggleStaffAttendance(staffId)}
-                >
-                  {renderCheckBox(item.attended)}
-                </TouchableOpacity>
-              </View>
-            );
-          })
-        )}
-      </View>
-    </View>
-  );
-
-  const renderInstructorTable = () => (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Instructor Attendance</Text>
-
-      <View style={styles.tableCard}>
-        <View style={styles.tableHeader}>
-          <Text style={[styles.headerCell, styles.idColumn]}>License No</Text>
-          <Text style={[styles.headerCell, styles.nameColumn]}>Name</Text>
-          <Text style={[styles.headerCell, styles.attendedColumn]}>Attended</Text>
-        </View>
-
-        {instructorAttendance.length === 0 ? (
-          <View style={styles.emptyRow}>
-            <Text style={styles.emptyText}>No instructors found</Text>
-          </View>
-        ) : (
-          instructorAttendance.map(item => {
-            const instructor = item.instructor;
-            const instructorId = instructor?._id || instructor;
-
-            return (
-              <View key={instructorId} style={styles.tableRow}>
-                <Text style={[styles.rowText, styles.idColumn]}>
-                  {getInstructorId(instructor)}
-                </Text>
-
-                <Text style={[styles.rowText, styles.nameColumn]}>
-                  {getPersonName(instructor)}
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.attendedColumn}
-                  onPress={() => toggleInstructorAttendance(instructorId)}
-                >
-                  {renderCheckBox(item.attended)}
-                </TouchableOpacity>
-              </View>
-            );
-          })
-        )}
-      </View>
-    </View>
-  );
 
   if (loading) {
     return (
@@ -540,289 +222,469 @@ const StaffAttendanceScreen = ({ navigation }) => {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <Ionicons name="arrow-back" size={24} color={COLORS.black} />
           </TouchableOpacity>
-
-          <Text style={styles.title}>Attendance</Text>
-
-          <TouchableOpacity
-            style={styles.insightBtn}
-            onPress={() => navigation.navigate('StaffPerformance')}
-          >
-            <Ionicons name="bar-chart-outline" size={18} color={COLORS.black} />
-          </TouchableOpacity>
+          <Text style={styles.title}>Staff Attendance</Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => {
+                const newMonth = new Date(currentMonth);
+                newMonth.setMonth(newMonth.getMonth() - 1);
+                setCurrentMonth(newMonth);
+              }}
+            >
+              <Ionicons name="chevron-back" size={20} color={COLORS.black} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.navBtn}
+              onPress={() => {
+                const newMonth = new Date(currentMonth);
+                newMonth.setMonth(newMonth.getMonth() + 1);
+                setCurrentMonth(newMonth);
+              }}
+            >
+              <Ionicons name="chevron-forward" size={20} color={COLORS.black} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        <View style={styles.monthHeader}>
+          <Text style={styles.monthText}>
+            {currentMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+          </Text>
         </View>
       </SafeAreaView>
 
       <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.list}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              loadAttendance();
-            }}
+            onRefresh={() => { setRefreshing(true); loadData(); }}
           />
         }
       >
-        <Text style={styles.mainTitle}>Mark employee attendance</Text>
-
-        <TouchableOpacity
-          style={styles.dateBox}
-          onPress={() => setShowDatePicker(true)}
-        >
-          <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
-
-          <Ionicons
-            name="calendar-outline"
-            size={24}
-            color={COLORS.black}
-          />
-        </TouchableOpacity>
-
-        {renderDatePicker()}
-
-        {renderStaffTable()}
-
-        {renderInstructorTable()}
-
-        <TouchableOpacity
-          style={[styles.submitButton, saving && styles.submitButtonPressed]}
-          onPress={handleSubmitAttendance}
-          disabled={saving}
-        >
-          {saving ? (
-            <ActivityIndicator color={COLORS.white} size="small" />
-          ) : (
-            <Text style={styles.submitButtonText}>
-              Complete attendance taking
-            </Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[
-            styles.reportButton,
-            generatingReport && styles.reportButtonDisabled,
-          ]}
-          onPress={handleGenerateReport}
-          disabled={generatingReport}
-        >
-          {generatingReport ? (
-            <ActivityIndicator color={COLORS.white} size="small" />
-          ) : (
-            <>
-              <Ionicons name="download-outline" size={20} color={COLORS.white} />
-              <Text style={styles.reportButtonText}>
-                Download daily attendance report
-              </Text>
-            </>
-          )}
-        </TouchableOpacity>
+        {staffMembers.length === 0 ? (
+          <View style={styles.empty}>
+            <Ionicons name="people-outline" size={48} color={COLORS.brandOrange} />
+            <Text style={styles.emptyText}>No staff members found</Text>
+          </View>
+        ) : (
+          staffMembers.map((staffMember) => (
+            <View key={staffMember._id} style={styles.staffCard}>
+              <View style={styles.staffHeader}>
+                <View style={styles.staffInfo}>
+                  <Text style={styles.staffName}>{staffMember.fullName}</Text>
+                  <Text style={styles.staffMeta}>{staffMember.department || 'N/A'}</Text>
+                </View>
+                <View style={[styles.statusBadge, {
+                  backgroundColor: staffMember.isActive ? COLORS.greenBg : COLORS.redBg,
+                }]}>
+                  <Text style={[styles.statusText, {
+                    color: staffMember.isActive ? COLORS.green : COLORS.red,
+                  }]}>{staffMember.isActive ? 'Active' : 'Inactive'}</Text>
+                </View>
+              </View>
+              <CalendarGrid staffMember={staffMember} />
+            </View>
+          ))
+        )}
       </ScrollView>
+
+      {/* Mark Attendance Modal */}
+      <Modal
+        visible={showMarkModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowMarkModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+           <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={styles.modalTitle}>Mark Attendance</Text>
+            <Text style={styles.modalSubtitle}>
+              {selectedStaff?.fullName} - {selectedDate?.toLocaleDateString()}
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.label}>Status</Text>
+              <View style={styles.statusButtons}>
+                {attendanceStatuses.map(s => (
+                  <TouchableOpacity
+                    key={s}
+                    style={[styles.statusButton, status === s && styles.statusButtonActive]}
+                    onPress={() => setStatus(s)}
+                  >
+                    <Text style={[styles.statusButtonText, status === s && styles.statusButtonTextActive]}>
+                      {s}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {['Late', 'Half Day'].includes(status) && (
+              <View style={styles.timeRow}>
+                <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
+                  <Text style={styles.label}>Check In</Text>
+                  <TouchableOpacity
+                    style={styles.timePickerBtn}
+                    onPress={() => setShowCheckInPicker(true)}
+                  >
+                    <Ionicons name="time-outline" size={18} color={COLORS.brandOrange} />
+                    <Text style={[styles.timePickerText, !checkIn && { color: COLORS.textMuted }]}>
+                      {checkIn ? formatTime(checkIn) : 'Select time'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
+                  <Text style={styles.label}>Check Out</Text>
+                  <TouchableOpacity
+                    style={styles.timePickerBtn}
+                    onPress={() => setShowCheckOutPicker(true)}
+                  >
+                    <Ionicons name="time-outline" size={18} color={COLORS.brandOrange} />
+                    <Text style={[styles.timePickerText, !checkOut && { color: COLORS.textMuted }]}>
+                      {checkOut ? formatTime(checkOut) : 'Select time'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            )}
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.cancelButton, { marginRight: 8 }]}
+                onPress={() => setShowMarkModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.submitButton}
+                onPress={submitAttendance}
+                disabled={submitting}
+              >
+                {submitting ? (
+                  <ActivityIndicator color="white" size="small" />
+                ) : (
+                  <Text style={styles.submitButtonText}>Save</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+           </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {showCheckInPicker && (
+        <DateTimePicker
+          value={checkIn || new Date()}
+          mode="time"
+          display={Platform.OS === 'android' ? 'clock' : 'spinner'}
+          is24Hour={true}
+          onChange={(event, date) => {
+            setShowCheckInPicker(false);
+            if (date) setCheckIn(date);
+          }}
+        />
+      )}
+
+      {showCheckOutPicker && (
+        <DateTimePicker
+          value={checkOut || new Date()}
+          mode="time"
+          display={Platform.OS === 'android' ? 'clock' : 'spinner'}
+          is24Hour={true}
+          onChange={(event, date) => {
+            setShowCheckOutPicker(false);
+            if (date) setCheckOut(date);
+          }}
+        />
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.white,
-  },
-
-  topSafeArea: {
-    backgroundColor: COLORS.gray,
-  },
-
-  header: {
-    backgroundColor: COLORS.gray,
-    paddingTop: 8,
-    paddingBottom: 16,
-    paddingHorizontal: 20,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottomLeftRadius: 24,
-    borderBottomRightRadius: 24,
-  },
-
-  title: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.black,
-  },
-
-  insightBtn: {
-    backgroundColor: COLORS.brandYellow,
-    padding: 8,
-    borderRadius: 12,
-  },
-
+  container: { flex: 1, backgroundColor: COLORS.white },
+  topSafeArea: { backgroundColor: COLORS.gray },
+  safe:    { flex: 1, backgroundColor: COLORS.white },
+  center:  { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
-
-  content: {
+  header: {
+    backgroundColor: COLORS.gray, 
+    paddingTop: 8, 
+    paddingBottom: 16, 
     paddingHorizontal: 20,
-    paddingTop: 28,
-    paddingBottom: 40,
-  },
-
-  mainTitle: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.black,
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-
-  dateBox: {
-    backgroundColor: COLORS.gray,
-    borderRadius: 14,
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    marginBottom: 24,
-    flexDirection: 'row',
+    flexDirection: 'row', 
+    justifyContent: 'space-between', 
     alignItems: 'center',
-    justifyContent: 'space-between',
+    borderBottomLeftRadius: 24, 
+    borderBottomRightRadius: 24,
   },
-
-  dateText: {
-    fontSize: 18,
-    color: COLORS.textMuted,
-    fontWeight: '500',
+  title: { 
+    fontSize: 24, 
+    fontWeight: '600', 
+    color: COLORS.black 
   },
-
-  section: {
-    marginBottom: 24,
+  navBtn: { 
+    backgroundColor: COLORS.brandYellow, 
+    borderRadius: 12, 
+    padding: 8 
   },
-
-  sectionTitle: {
-    fontSize: 17,
-    fontWeight: '700',
+  monthHeader: {
+    backgroundColor: COLORS.gray,
+    paddingBottom: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  monthText: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.black,
-    marginBottom: 10,
   },
-
-  tableCard: {
+  list: { 
+    padding: 16, 
+    paddingBottom: 40 
+  },
+  staffCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: COLORS.white,
+    padding: 16,
+    marginBottom: 16,
   },
-
-  tableHeader: {
+  staffHeader: {
     flexDirection: 'row',
-    backgroundColor: COLORS.gray,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 12,
   },
-
-  tableRow: {
-    flexDirection: 'row',
-    minHeight: 64,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+  staffInfo: {
+    flex: 1,
   },
-
-  headerCell: {
-    fontSize: 14,
-    fontWeight: '700',
+  staffName: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.black,
+    marginBottom: 2,
   },
-
-  rowText: {
+  staffMeta: {
     fontSize: 13,
+    color: COLORS.textMuted,
+  },
+  statusBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  calendarContainer: {
+    backgroundColor: COLORS.bgLight,
+    borderRadius: 12,
+    padding: 12,
+  },
+  calendarHeader: {
+    flexDirection: 'row',
+    marginBottom: 8,
+  },
+  dayName: {
+    flex: 1,
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    textAlign: 'center',
+  },
+  calendarGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  calendarCell: {
+    width: '14.28%',
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    marginBottom: 4,
+  },
+  calendarCellEmpty: {
+    width: '14.28%',
+    aspectRatio: 1,
+  },
+  calendarCellToday: {
+    borderWidth: 2,
+    borderColor: COLORS.brandOrange,
+  },
+  calendarCellFuture: {
+    opacity: 0.3,
+  },
+  calendarCellText: {
+    fontSize: 12,
+    fontWeight: '600',
     color: COLORS.black,
   },
-
-  idColumn: {
-    flex: 1.2,
+  calendarCellTextToday: {
+    color: COLORS.brandOrange,
   },
-
-  nameColumn: {
-    flex: 1.5,
+  calendarCellTextFuture: {
+    color: COLORS.textMuted,
   },
-
-  attendedColumn: {
-    flex: 0.8,
+  attendanceDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginTop: 2,
+  },
+  empty: { 
+    alignItems: 'center', 
+    paddingVertical: 60, 
+    gap: 12 
+  },
+  emptyText: { 
+    fontSize: 15, 
+    color: COLORS.textMuted 
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 24,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.black,
+    marginBottom: 4,
+  },
+  modalSubtitle: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    marginBottom: 20,
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.black,
+    marginBottom: 8,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  timeRow: {
+    flexDirection: 'row',
+  },
+  timePickerBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: COLORS.bgLight,
   },
-
-  checkBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    borderWidth: 1.5,
-    borderColor: COLORS.gray,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.white,
+  timePickerText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.black,
   },
-
-  checkBoxActive: {
+  statusButtons: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  statusButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: COLORS.bgLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  statusButtonActive: {
     backgroundColor: COLORS.brandOrange,
     borderColor: COLORS.brandOrange,
   },
-
-  emptyRow: {
-    paddingVertical: 24,
-    alignItems: 'center',
+  statusButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textDark,
   },
-
-  emptyText: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
-
-  submitButton: {
-    backgroundColor: COLORS.blue || '#2563EB',
-    borderRadius: 10,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginHorizontal: 8,
-    marginTop: 4,
-  },
-
-  submitButtonPressed: {
-    backgroundColor: '#1D4ED8',
-    opacity: 0.9,
-  },
-
-  submitButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
+  statusButtonTextActive: {
     color: COLORS.white,
   },
-
-  reportButton: {
-    backgroundColor: COLORS.green || '#16A34A',
-    borderRadius: 10,
-    paddingVertical: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 8,
-    marginTop: 14,
+  modalActions: {
     flexDirection: 'row',
-    gap: 8,
+    justifyContent: 'flex-end',
+    marginTop: 24,
   },
-
-  reportButtonDisabled: {
-    opacity: 0.7,
+  cancelButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
   },
-
-  reportButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.white,
+  cancelButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.textDark,
+  },
+  submitButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 8,
+  },
+  submitButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'white',
+  },
+  iosPickerWrap: {
+    backgroundColor: COLORS.bgLight,
+    borderRadius: 12,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  iosPickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingTop: 8,
+  },
+  iosDoneBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  iosDoneText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.brandOrange,
+  },
+  iosPicker: {
+    height: 150,
   },
 });
 

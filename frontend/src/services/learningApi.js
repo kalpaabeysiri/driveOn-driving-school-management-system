@@ -29,6 +29,8 @@ export const getLearningTopicById = (id) => api.get(`/learning/topics/${id}`);
 export const createLearningTopic = (data) => api.post('/learning/topics', data);
 export const updateLearningTopic = (id, data) => api.put(`/learning/topics/${id}`, data);
 export const deleteLearningTopic = (id) => api.delete(`/learning/topics/${id}`);
+export const reorderLearningTopics = () => api.post('/learning/topics/reorder');
+export const deleteAllLearningTopics = () => api.delete('/learning/topics/delete-all');
 
 // ── Lessons (Admin) ───────────────────────────────────────────────────────────
 export const getLearningLessons = (params) => api.get('/learning/lessons', { params });
@@ -36,6 +38,9 @@ export const getLearningLessonById = (id) => api.get(`/learning/lessons/${id}`);
 export const createLearningLesson = (data) => api.post('/learning/lessons', data);
 export const updateLearningLesson = (id, data) => api.put(`/learning/lessons/${id}`, data);
 export const deleteLearningLesson = (id) => api.delete(`/learning/lessons/${id}`);
+export const reorderLearningLessons = (topicId) => api.post('/learning/lessons/reorder', null, { params: topicId ? { topicId } : {} });
+
+export const deleteAllLearningLessons = (topicId) => api.delete(`/learning/lessons/all/${topicId}`);
 
 // ── Videos (Admin) ────────────────────────────────────────────────────────────
 export const getVideoTutorials = (params) => api.get('/learning/videos', { params });
@@ -62,6 +67,7 @@ export const updateVideoTutorial = (id, data, file) => {
   return api.put(`/learning/videos/${id}`, data);
 };
 export const deleteVideoTutorial = (id) => api.delete(`/learning/videos/${id}`);
+export const deleteAllVideoTutorials = (lessonId) => api.delete(`/learning/videos/all/${lessonId}`);
 
 // ── Quizzes (Admin/Student) ───────────────────────────────────────────────────
 export const getLearningQuizzes = (params) => api.get('/learning/quizzes', { params });
@@ -69,6 +75,8 @@ export const getLearningQuizById = (id) => api.get(`/learning/quizzes/${id}`);
 export const createLearningQuiz = (data) => api.post('/learning/quizzes', data);
 export const updateLearningQuiz = (id, data) => api.put(`/learning/quizzes/${id}`, data);
 export const deleteLearningQuiz = (id) => api.delete(`/learning/quizzes/${id}`);
+export const deleteAllLearningQuizzes = (lessonId) => api.delete(`/learning/quizzes/all/${lessonId}`);
+export const deleteAllLearningQuizzesGlobal = () => api.delete('/learning/quizzes/delete-all');
 
 // ── Analytics (Admin) ─────────────────────────────────────────────────────────
 export const getLearningQuizAnalytics = (quizId) => api.get(`/learning/analytics/quizzes/${quizId}`);

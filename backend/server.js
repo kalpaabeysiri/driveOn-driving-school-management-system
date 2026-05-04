@@ -18,7 +18,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth',        require('./routes/auth'));
 app.use('/api/sessions',    require('./routes/sessions'));
 app.use('/api/instructors', require('./routes/instructors'));
-app.use('/api/instructor-exams', require('./routes/instructorExams'));
+// Exam & student progress — ./Exam and Student Managing/ (models, routes, controllers, seeds): instructor-exams, exams, exam-progress, exam-attendance, exam-results, student-exams
+app.use('/api/instructor-exams', require('./Exam and Student Managing/routes/instructorExams'));
 app.use('/api/vehicles',    require('./routes/vehicles'));
 app.use('/api/payments',    require('./routes/payments'));
 app.use('/api/quizzes',     require('./routes/quizzes'));
@@ -33,12 +34,11 @@ app.use('/api/staff',              require('./routes/staff'));
 app.use('/api/notifications',      require('./routes/notifications'));
 app.use('/api/inquiries',          require('./routes/inquiries'));
 
-// Exam System Routes
-app.use('/api/exams', require('./routes/examSystem'));
-app.use('/api/exam-progress', require('./routes/examProgress'));
-app.use('/api/exam-attendance', require('./routes/examAttendance'));
-app.use('/api/exam-results', require('./routes/examResults'));
-app.use('/api/student-exams', require('./routes/studentExams'));
+app.use('/api/exams', require('./Exam and Student Managing/routes/examSystem'));
+app.use('/api/exam-progress', require('./Exam and Student Managing/routes/examProgress'));
+app.use('/api/exam-attendance', require('./Exam and Student Managing/routes/examAttendance'));
+app.use('/api/exam-results', require('./Exam and Student Managing/routes/examResults'));
+app.use('/api/student-exams', require('./Exam and Student Managing/routes/studentExams'));
 app.use('/api/attendance', require('./routes/attendance'));
 
 // Health check
@@ -52,7 +52,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Server error', error: err.message });
 });
 
-const PORT = process.env.PORT || 7070;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Local: http://localhost:${PORT}`);

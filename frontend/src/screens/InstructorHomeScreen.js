@@ -7,23 +7,27 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { getInstructorById, getNotifications, markAllRead } from '../services/instructorVehicleApi';
+import { getSessions } from '../services/sessionApi';
 import { COLORS } from '../theme';
 
 export default function InstructorHomeScreen({ navigation }) {
   const { user } = useAuth();
   const [instructor, setInstructor] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [ins, notifs] = await Promise.all([
+        const [ins, notifs, sess] = await Promise.all([
           getInstructorById(user._id),
           getNotifications(user._id),
+          getSessions({ instructor: user._id }),
         ]);
         setInstructor(ins.data);
         setNotifications(notifs.data);
+        setSessions(sess.data);
       } catch (err) {
         console.log(err.message);
       } finally {
@@ -56,10 +60,11 @@ export default function InstructorHomeScreen({ navigation }) {
   ) || [];
 
   const notifTypeColors = {
-    SessionAssigned: { bg: COLORS.greenBg, text: COLORS.green,       icon: 'calendar-outline'   },
-    SessionCancelled:{ bg: COLORS.redBg,   text: COLORS.red,         icon: 'close-circle-outline'},
-    InsuranceExpiry: { bg: '#FFF3CD',      text: '#856404',           icon: 'warning-outline'    },
-    General:         { bg: COLORS.blueBg,  text: COLORS.blue,        icon: 'information-circle-outline' },
+    SessionAssigned:  { bg: COLORS.greenBg,  text: COLORS.green,       icon: 'calendar-outline'   },
+    SessionBooking:   { bg: COLORS.blueBg,   text: COLORS.blue,        icon: 'person-add-outline' },
+    SessionCancelled: { bg: COLORS.redBg,    text: COLORS.red,         icon: 'close-circle-outline'},
+    InsuranceExpiry:  { bg: '#FFF3CD',      text: '#856404',           icon: 'warning-outline'    },
+    General:          { bg: COLORS.gray,     text: COLORS.textMuted,   icon: 'information-circle-outline' },
   };
 
   return (
@@ -195,6 +200,48 @@ export default function InstructorHomeScreen({ navigation }) {
           </>
         )}
 
+        {/* Sessions */}
+        <Text style={styles.sectionTitle}>My Sessions</Text>
+        {sessions.length === 0 ? (
+          <View style={styles.emptyNotif}>
+            <Ionicons name="calendar-outline" size={36} color={COLORS.textMuted} />
+            <Text style={styles.emptyNotifText}>No sessions assigned</Text>
+          </View>
+        ) : (
+          sessions.map((s) => (
+            <View key={s._id} style={styles.sessionCard}>
+              <View style={styles.sessionTypeBadge}>
+                <Text style={styles.sessionTypeText}>{s.sessionType}</Text>
+              </View>
+              <View style={styles.flex1}>
+                <Text style={styles.sessionDate}>{new Date(s.date).toDateString()}</Text>
+                <Text style={styles.sessionTime}>{s.startTime} – {s.endTime}</Text>
+                <Text style={styles.sessionStudents}>{s.enrolledStudents?.length || 0} students enrolled</Text>
+              </View>
+              <View style={styles.sessionActions}>
+                {s.status === 'Ongoing' && (
+                  <TouchableOpacity
+                    style={styles.confirmBtn}
+                    onPress={() => navigation.navigate('ConfirmAttendance', {
+                      sessionId: s._id,
+                    })}
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.white} />
+                    <Text style={styles.confirmBtnText}>Confirm</Text>
+                  </TouchableOpacity>
+                )}
+                <View style={[styles.statusBadge, {
+                  backgroundColor: s.status === 'Ongoing' ? '#FFF3CD' : s.status === 'Completed' ? COLORS.greenBg : COLORS.bgLight,
+                }]}>
+                  <Text style={[styles.statusBadgeText, {
+                    color: s.status === 'Ongoing' ? '#856404' : s.status === 'Completed' ? COLORS.green : COLORS.textMuted,
+                  }]}>{s.status}</Text>
+                </View>
+              </View>
+            </View>
+          ))
+        )}
+
         {/* Notifications */}
         <View style={styles.notifHeader}>
           <Text style={styles.sectionTitle}>Notifications</Text>
@@ -272,6 +319,17 @@ const styles = StyleSheet.create({
   statLabel:    { fontSize: 9, color: COLORS.textMuted, textAlign: 'center', marginTop: 2 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.black, marginBottom: 12 },
   vehicleCard:  { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10 },
+  sessionCard:{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 8 },
+  sessionActions:{ flexDirection: 'column', alignItems: 'flex-end', gap: 6 },
+  sessionTypeBadge:{ backgroundColor: COLORS.brandYellow, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  sessionTypeText:{ fontSize: 11, fontWeight: '700', color: COLORS.black },
+  sessionDate:{ fontSize: 14, fontWeight: '600', color: COLORS.black },
+  sessionTime:{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  sessionStudents:{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  confirmBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.brandOrange, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  confirmBtnText:{ fontSize: 12, fontWeight: '600', color: COLORS.white },
+  statusBadge:{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadgeText:{ fontSize: 11, fontWeight: '700' },
   vehicleIcon:  { backgroundColor: COLORS.brandYellow, borderRadius: 10, padding: 10 },
   vehicleName:  { fontSize: 14, fontWeight: '600', color: COLORS.black },
   vehicleMeta:  { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },

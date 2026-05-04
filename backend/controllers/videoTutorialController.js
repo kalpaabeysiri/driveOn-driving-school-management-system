@@ -91,9 +91,22 @@ const deleteVideoTutorial = async (req, res) => {
   }
 };
 
+// @desc   Delete all videos by lesson (Admin)
+// @route  DELETE /api/learning/videos/all/:lessonId
+const deleteAllVideos = async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const result = await VideoTutorial.deleteMany({ lesson: lessonId });
+    res.json({ message: 'All videos deleted', deletedCount: result.deletedCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 module.exports = {
   createVideoTutorial,
   getVideoTutorials,
   updateVideoTutorial,
   deleteVideoTutorial,
+  deleteAllVideos,
 };

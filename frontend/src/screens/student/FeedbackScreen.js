@@ -6,10 +6,13 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { submitFeedback, getFeedbackTemplates } from '../../services/feedbackApi';
+import { useAuth } from '../../context/AuthContext';
 import { COLORS } from '../../theme';
 
 export default function FeedbackScreen({ route, navigation }) {
-  const { sessionId, studentId, sessionInfo } = route.params;
+  const { sessionId, sessionInfo } = route.params;
+  const { user } = useAuth();
+  const studentId = user?._id;
 
   const [rating,    setRating]    = useState(0);
   const [comment,   setComment]   = useState('');

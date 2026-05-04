@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import { getSessionAttendance } from '../../services/sessionApi';
+import { getSessionAttendance, updateAttendance, deleteAttendance } from '../../services/sessionApi';
 import { COLORS } from '../../theme';
 
 const STATUS_OPTIONS = ['Present', 'Late', 'Absent'];
@@ -23,19 +23,13 @@ export default function TakeAttendanceScreen({ route, navigation }) {
   const [data,       setData]       = useState(null);
   const [loading,    setLoading]    = useState(true);
   const [printing,   setPrinting]   = useState(false);
-  const [attendance, setAttendance] = useState({});
+  const [editModal,  setEditModal]  = useState(null); // { studentId, attendanceId, currentStatus }
 
   useEffect(() => {
     const fetch = async () => {
       try {
         const { data: res } = await getSessionAttendance(sessionId);
         setData(res);
-        // Pre-fill existing attendance
-        const existing = {};
-        res.attendanceList.forEach(item => {
-          existing[item.student._id] = item.status === 'Not Marked' ? 'Present' : item.status;
-        });
-        setAttendance(existing);
       } catch {
         Alert.alert('Error', 'Could not load attendance');
       } finally {
@@ -45,20 +39,52 @@ export default function TakeAttendanceScreen({ route, navigation }) {
     fetch();
   }, []);
 
-  const markAll = (status) => {
-    const updated = {};
-    data.attendanceList.forEach(item => { updated[item.student._id] = status; });
-    setAttendance(updated);
+  const handleEdit = async (newStatus) => {
+    if (!editModal) return;
+    try {
+      await updateAttendance(editModal.attendanceId, { status: newStatus });
+      setEditModal(null);
+      // Refresh data
+      const { data: res } = await getSessionAttendance(sessionId);
+      setData(res);
+      Alert.alert('Success', 'Attendance updated successfully');
+    } catch {
+      Alert.alert('Error', 'Could not update attendance');
+    }
+  };
+
+  const handleDelete = (studentId, attendanceId) => {
+    Alert.alert('Delete Attendance', 'Are you sure you want to delete this attendance record?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteAttendance(attendanceId);
+            // Refresh data
+            const { data: res } = await getSessionAttendance(sessionId);
+            setData(res);
+            Alert.alert('Success', 'Attendance deleted successfully');
+          } catch {
+            Alert.alert('Error', 'Could not delete attendance');
+          }
+        },
+      },
+    ]);
   };
 
   const handlePrintPDF = async () => {
+    if (data?.session?.status !== 'Completed') {
+      return Alert.alert('Error', 'PDF can only be generated for completed sessions');
+    }
     try {
       setPrinting(true);
       const session = data?.session;
       const rows = data?.attendanceList?.map((item, i) => {
-        const status = attendance[item.student._id] || 'Present';
-        const color = status === 'Present' ? '#16a34a' : status === 'Late' ? '#854d0e' : '#dc2626';
-        const bg    = status === 'Present' ? '#dcfce7'  : status === 'Late' ? '#fef9c3'  : '#fee2e2';
+        const status = item.status;
+        const color = status === 'Present' ? '#16a34a' : status === 'Late' ? '#854d0e' : status === 'Absent' ? '#dc2626' : '#9ca3af';
+        const bg    = status === 'Present' ? '#dcfce7'  : status === 'Late' ? '#fef9c3'  : status === 'Absent' ? '#fee2e2' : '#f3f4f6';
         return `<tr style="background:${i % 2 === 0 ? '#f9fafb' : '#fff'}">
           <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb">${i + 1}</td>
           <td style="padding:10px 14px;border-bottom:1px solid #e5e7eb;font-weight:600">${item.student.firstName} ${item.student.lastName}</td>
@@ -89,9 +115,9 @@ export default function TakeAttendanceScreen({ route, navigation }) {
           <div class="info-box"><div class="val">${session?.sessionType || ''}</div><div class="lbl">Session Type</div></div>
           <div class="info-box"><div class="val">${new Date(session?.date).toDateString()}</div><div class="lbl">Date</div></div>
           <div class="info-box"><div class="val">${session?.startTime} – ${session?.endTime}</div><div class="lbl">Time</div></div>
-          <div class="info-box"><div class="val" style="color:#16a34a">${Object.values(attendance).filter(s=>s==='Present').length}</div><div class="lbl">Present</div></div>
-          <div class="info-box"><div class="val" style="color:#854d0e">${Object.values(attendance).filter(s=>s==='Late').length}</div><div class="lbl">Late</div></div>
-          <div class="info-box"><div class="val" style="color:#dc2626">${Object.values(attendance).filter(s=>s==='Absent').length}</div><div class="lbl">Absent</div></div>
+          <div class="info-box"><div class="val" style="color:#16a34a">${data?.summary?.present || 0}</div><div class="lbl">Present</div></div>
+          <div class="info-box"><div class="val" style="color:#854d0e">${data?.summary?.late || 0}</div><div class="lbl">Late</div></div>
+          <div class="info-box"><div class="val" style="color:#dc2626">${data?.summary?.absent || 0}</div><div class="lbl">Absent</div></div>
         </div>
         <table>
           <thead><tr>
@@ -120,9 +146,9 @@ export default function TakeAttendanceScreen({ route, navigation }) {
 
   if (loading) return <View style={styles.center}><ActivityIndicator size="large" color={COLORS.brandOrange} /></View>;
 
-  const presentCount = Object.values(attendance).filter(s => s === 'Present').length;
-  const lateCount    = Object.values(attendance).filter(s => s === 'Late').length;
-  const absentCount  = Object.values(attendance).filter(s => s === 'Absent').length;
+  const presentCount = data?.summary?.present || 0;
+  const lateCount    = data?.summary?.late || 0;
+  const absentCount  = data?.summary?.absent || 0;
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
@@ -156,21 +182,13 @@ export default function TakeAttendanceScreen({ route, navigation }) {
           ))}
         </View>
 
-        {/* Mark all buttons */}
-        <View style={styles.markAllRow}>
-          <Text style={styles.markAllLabel}>Mark All:</Text>
-          {STATUS_OPTIONS.map(s => (
-            <TouchableOpacity key={s} style={[styles.markAllBtn, { backgroundColor: STATUS_COLORS[s].bg }]} onPress={() => markAll(s)}>
-              <Text style={[styles.markAllBtnText, { color: STATUS_COLORS[s].text }]}>{s}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         {/* Student list */}
         <Text style={styles.sectionTitle}>Students ({data?.attendanceList?.length || 0})</Text>
         {data?.attendanceList?.map((item, index) => {
-          const currentStatus = attendance[item.student._id] || 'Present';
-          const colors = STATUS_COLORS[currentStatus];
+          const currentStatus = item.status;
+          const colors = STATUS_COLORS[currentStatus] || STATUS_COLORS['Not Marked'];
+          const isConfirmed = item.attendance?.confirmed;
+          const hasAttendance = item.attendance !== null;
 
           return (
             <View key={item.student._id} style={styles.studentCard}>
@@ -181,35 +199,87 @@ export default function TakeAttendanceScreen({ route, navigation }) {
                 <Text style={styles.studentName}>{item.student.firstName} {item.student.lastName}</Text>
                 <Text style={styles.studentNIC}>{item.student.NIC}</Text>
               </View>
-              {/* Status toggle buttons */}
-              <View style={styles.statusBtns}>
-                {STATUS_OPTIONS.map(s => (
-                  <TouchableOpacity
-                    key={s}
-                    style={[styles.statusBtn, currentStatus === s && { backgroundColor: STATUS_COLORS[s].bg, borderColor: STATUS_COLORS[s].text }]}
-                    onPress={() => setAttendance(prev => ({ ...prev, [item.student._id]: s }))}
-                  >
-                    <Text style={[styles.statusBtnText, currentStatus === s && { color: STATUS_COLORS[s].text, fontWeight: '700' }]}>
-                      {s[0]}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+              {/* Status badge */}
+              <View style={[styles.statusBadge, { backgroundColor: colors.bg }]}>
+                <Ionicons name={colors.icon} size={16} color={colors.text} />
+                <Text style={[styles.statusBadgeText, { color: colors.text }]}>{currentStatus}</Text>
               </View>
+              {isConfirmed && (
+                <View style={styles.confirmedBadge}>
+                  <Ionicons name="checkmark-circle" size={18} color={COLORS.green} />
+                </View>
+              )}
+              {/* Edit/Delete buttons */}
+              {hasAttendance && (
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => setEditModal({
+                      studentId: item.student._id,
+                      attendanceId: item.attendance._id,
+                      currentStatus,
+                    })}
+                  >
+                    <Ionicons name="create-outline" size={18} color={COLORS.blue} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.actionBtn}
+                    onPress={() => handleDelete(item.student._id, item.attendance._id)}
+                  >
+                    <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+                  </TouchableOpacity>
+                </View>
+              )}
             </View>
           );
         })}
 
         {/* Print PDF button */}
-        <TouchableOpacity style={styles.saveBtn} onPress={handlePrintPDF} disabled={printing}>
+        <TouchableOpacity style={styles.saveBtn} onPress={handlePrintPDF} disabled={printing || data?.session?.status !== 'Completed'}>
           {printing
             ? <ActivityIndicator color={COLORS.white} />
             : <>
                 <Ionicons name="print-outline" size={20} color={COLORS.white} />
-                <Text style={styles.saveBtnText}>Print Attendance PDF</Text>
+                <Text style={styles.saveBtnText}>Generate PDF</Text>
               </>
           }
         </TouchableOpacity>
       </ScrollView>
+
+      {/* Edit Modal */}
+      <Modal visible={!!editModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Attendance Status</Text>
+            {STATUS_OPTIONS.map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.modalOption,
+                  editModal?.currentStatus === status && styles.modalOptionSelected,
+                ]}
+                onPress={() => handleEdit(status)}
+              >
+                <Ionicons
+                  name={STATUS_COLORS[status].icon}
+                  size={20}
+                  color={editModal?.currentStatus === status ? COLORS.white : STATUS_COLORS[status].text}
+                />
+                <Text style={[
+                  styles.modalOptionText,
+                  editModal?.currentStatus === status && styles.modalOptionTextSelected,
+                ]}>{status}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => setEditModal(null)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -228,10 +298,6 @@ const styles = StyleSheet.create({
   summaryCard:  { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   summaryValue: { fontSize: 24, fontWeight: '800' },
   summaryLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  markAllRow:   { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 16 },
-  markAllLabel: { fontSize: 13, fontWeight: '600', color: COLORS.textMuted },
-  markAllBtn:   { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
-  markAllBtnText: { fontSize: 12, fontWeight: '700' },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.black, marginBottom: 10 },
   studentCard:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 12, marginBottom: 8 },
   studentNum:   { width: 30, height: 30, borderRadius: 15, backgroundColor: COLORS.bgLight, alignItems: 'center', justifyContent: 'center' },
@@ -239,9 +305,90 @@ const styles = StyleSheet.create({
   flex1:        { flex: 1 },
   studentName:  { fontSize: 13, fontWeight: '600', color: COLORS.black },
   studentNIC:   { fontSize: 11, color: COLORS.textMuted },
-  statusBtns:   { flexDirection: 'row', gap: 4 },
-  statusBtn:    { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: COLORS.borderLight, backgroundColor: COLORS.bgLight },
-  statusBtnText:{ fontSize: 12, fontWeight: '500', color: COLORS.textMuted },
-  saveBtn:      { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: COLORS.brandOrange, borderRadius: 14, paddingVertical: 16, marginTop: 16 },
-  saveBtnText:  { color: COLORS.white, fontWeight: '700', fontSize: 16 },
+  statusBadge:  { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  confirmedBadge: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: COLORS.greenBg,
+    alignItems: 'center', justifyContent: 'center',
+    marginLeft: 8,
+  },
+  actionButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 12,
+  },
+  actionBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: COLORS.bgLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveBtn: {
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 20,
+  },
+  saveBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 16 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 24,
+    width: '100%',
+    maxWidth: 320,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.black,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: COLORS.bgLight,
+    marginBottom: 8,
+  },
+  modalOptionSelected: {
+    backgroundColor: COLORS.brandOrange,
+  },
+  modalOptionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.black,
+  },
+  modalOptionTextSelected: {
+    color: COLORS.white,
+  },
+  modalCancel: {
+    marginTop: 8,
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+  },
 });

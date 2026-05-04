@@ -20,6 +20,26 @@ const attendanceSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
   },
+  markedByRole: {
+    type: String,
+    enum: ['admin', 'student', 'instructor'],
+    default: 'admin',
+  },
+  selfMarked: {
+    type: Boolean,
+    default: false,
+  },
+  confirmed: {
+    type: Boolean,
+    default: false,
+  },
+  confirmedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Instructor',
+  },
+  confirmedAt: {
+    type: Date,
+  },
   notes: {
     type: String,
   },

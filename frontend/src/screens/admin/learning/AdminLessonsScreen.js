@@ -12,12 +12,18 @@ import {
   createLearningLesson,
   updateLearningLesson,
   deleteLearningLesson,
+  reorderLearningLessons,
+  getVideoTutorials,
+  getLearningQuizzes,
+  deleteAllLearningLessons,
 } from '../../../services/learningApi';
 
 export default function AdminLessonsScreen({ route, navigation }) {
   const { topicId, topicTitle } = route.params || {};
 
   const [lessons, setLessons] = useState([]);
+  const [videoCounts, setVideoCounts] = useState({});
+  const [quizCounts, setQuizCounts] = useState({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -36,9 +42,28 @@ export default function AdminLessonsScreen({ route, navigation }) {
 
   const load = useCallback(async () => {
     try {
+      await reorderLearningLessons(topicId);
       const params = topicId ? { topic: topicId } : {};
-      const { data } = await getLearningLessons(params);
-      setLessons(data || []);
+      const [lessonsRes, videosRes, quizzesRes] = await Promise.all([
+        getLearningLessons(params),
+        getVideoTutorials(),
+        getLearningQuizzes(),
+      ]);
+      setLessons(lessonsRes.data || []);
+
+      const vCounts = {};
+      (videosRes.data || []).forEach((v) => {
+        const lid = v.lesson?._id || v.lesson;
+        if (lid) vCounts[lid] = (vCounts[lid] || 0) + 1;
+      });
+      setVideoCounts(vCounts);
+
+      const qCounts = {};
+      (quizzesRes.data || []).forEach((q) => {
+        const lid = q.lesson?._id || q.lesson;
+        if (lid) qCounts[lid] = (qCounts[lid] || 0) + 1;
+      });
+      setQuizCounts(qCounts);
     } catch {
       Alert.alert('Error', 'Could not load lessons');
     } finally {
@@ -128,32 +153,91 @@ export default function AdminLessonsScreen({ route, navigation }) {
     ]);
   };
 
-  const renderLesson = ({ item }) => {
-    if (!item || !item._id) {
-      return null;
+  const confirmDeleteAll = () => {
+    if (!topicId) {
+      Alert.alert('Error', 'No topic selected');
+      return;
     }
-    
+    Alert.alert(
+      'Delete All Lessons',
+      `Delete all lessons in this topic? This will also delete all videos and quizzes in those lessons. This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const res = await deleteAllLearningLessons(topicId);
+              Alert.alert('Success', `Deleted ${res.data.deletedCount} lessons`);
+              load();
+            } catch (e) {
+              Alert.alert('Error', e.response?.data?.message || 'Could not delete lessons');
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const contentTypeIcon = (type) => {
+    if (type === 'Video') return 'videocam-outline';
+    if (type === 'Text') return 'document-text-outline';
+    return 'layers-outline';
+  };
+
+  const renderLesson = ({ item }) => {
+    if (!item || !item._id) return null;
+    const videos = videoCounts[item._id] || 0;
+    const quizzes = quizCounts[item._id] || 0;
+    const isPublished = item.status === 'Published';
     return (
       <TouchableOpacity
         style={styles.card}
         onPress={() => navigation.navigate('AdminLessonDetail', { lessonId: item._id, lessonTitle: item.title })}
+        activeOpacity={0.75}
       >
-        <View style={styles.cardTop}>
-          <View style={styles.flex1}>
-            <Text style={styles.cardTitle}>{item.title}</Text>
-            {!!item.description && <Text style={styles.cardMeta} numberOfLines={2}>{item.description}</Text>}
-            <Text style={styles.cardMeta}>
-              {item.contentType} · {item.estimatedDuration || 0}m · {item.status}
-            </Text>
+        <View style={styles.cardLeft}>
+          <View style={styles.orderBadge}>
+            <Text style={styles.orderText}>{item.displayOrder ?? 0}</Text>
           </View>
-          <View style={styles.actions}>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(item)}>
-              <Ionicons name="create-outline" size={18} color={COLORS.blue} />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.iconBtn} onPress={() => confirmDelete(item)}>
-              <Ionicons name="trash-outline" size={18} color={COLORS.red} />
-            </TouchableOpacity>
+        </View>
+        <View style={styles.flex1}>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
+            <View style={[styles.statusPill, isPublished ? styles.pillPublished : styles.pillDraft]}>
+              <Text style={[styles.pillText, isPublished ? styles.pillPublishedText : styles.pillDraftText]}>
+                {item.status}
+              </Text>
+            </View>
           </View>
+          {!!item.description && <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>}
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Ionicons name={contentTypeIcon(item.contentType)} size={11} color={COLORS.blue} />
+              <Text style={styles.badgeText}>{item.contentType}</Text>
+            </View>
+            <View style={styles.badge}>
+              <Ionicons name="time-outline" size={11} color={COLORS.textMuted} />
+              <Text style={styles.badgeText}>{item.estimatedDuration || 0} min</Text>
+            </View>
+            <View style={styles.badge}>
+              <Ionicons name="videocam-outline" size={11} color={COLORS.red} />
+              <Text style={styles.badgeText}>{videos} video{videos !== 1 ? 's' : ''}</Text>
+            </View>
+            <View style={styles.badge}>
+              <Ionicons name="help-circle-outline" size={11} color={COLORS.brandOrange} />
+              <Text style={styles.badgeText}>{quizzes} quiz{quizzes !== 1 ? 'zes' : ''}</Text>
+            </View>
+          </View>
+        </View>
+        <View style={styles.actions}>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => openEdit(item)}>
+            <Ionicons name="create-outline" size={18} color={COLORS.blue} />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconBtn} onPress={() => confirmDelete(item)}>
+            <Ionicons name="trash-outline" size={18} color={COLORS.red} />
+          </TouchableOpacity>
         </View>
       </TouchableOpacity>
     );
@@ -168,9 +252,16 @@ export default function AdminLessonsScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color={COLORS.black} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
-          <Ionicons name="add" size={22} color={COLORS.black} />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          {lessons.length > 0 && (
+            <TouchableOpacity style={styles.deleteAllBtn} onPress={confirmDeleteAll}>
+              <Ionicons name="trash-outline" size={20} color={COLORS.red} />
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={styles.addBtn} onPress={openCreate}>
+            <Ionicons name="add" size={22} color={COLORS.black} />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <FlatList
@@ -287,13 +378,27 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: COLORS.black, textAlign: 'center' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  deleteAllBtn: { padding: 8, borderRadius: 12, backgroundColor: '#FEE2E2' },
   addBtn: { backgroundColor: COLORS.brandYellow, borderRadius: 12, padding: 8 },
   list: { padding: 16, paddingBottom: 40 },
-  card: { backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10 },
-  cardTop: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
-  cardTitle: { fontSize: 15, fontWeight: '700', color: COLORS.black },
-  cardMeta: { fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  card: { backgroundColor: COLORS.white, borderRadius: 16, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 10, flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  cardLeft: { alignItems: 'center', paddingTop: 2 },
+  orderBadge: { width: 28, height: 28, borderRadius: 8, backgroundColor: COLORS.brandOrange, alignItems: 'center', justifyContent: 'center' },
+  orderText: { fontSize: 12, fontWeight: '800', color: COLORS.white },
   flex1: { flex: 1 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  cardTitle: { flex: 1, fontSize: 15, fontWeight: '700', color: COLORS.black },
+  cardDesc: { fontSize: 12, color: COLORS.textMuted, marginBottom: 6, lineHeight: 16 },
+  statusPill: { borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2, borderWidth: 1 },
+  pillPublished: { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
+  pillPublishedText: { color: '#16A34A', fontSize: 10, fontWeight: '700' },
+  pillDraft: { backgroundColor: COLORS.bgLight, borderColor: COLORS.border },
+  pillDraftText: { color: COLORS.textMuted, fontSize: 10, fontWeight: '700' },
+  pillText: { fontSize: 10, fontWeight: '700' },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  badge: { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: COLORS.bgLight, borderRadius: 20, paddingHorizontal: 7, paddingVertical: 3, borderWidth: 1, borderColor: COLORS.border },
+  badgeText: { fontSize: 10, fontWeight: '600', color: COLORS.textMuted },
   actions: { gap: 6, alignItems: 'flex-end' },
   iconBtn: { padding: 8, borderRadius: 10, backgroundColor: COLORS.bgLight },
   empty: { alignItems: 'center', paddingVertical: 60, gap: 12 },

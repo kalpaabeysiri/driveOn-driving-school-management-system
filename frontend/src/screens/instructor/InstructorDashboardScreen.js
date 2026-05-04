@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert, RefreshControl,
+  StyleSheet, ActivityIndicator, Alert, RefreshControl, FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import { getInstructorById, getNotifications, markAllRead } from '../../services/instructorVehicleApi';
+import { getSessions } from '../../services/sessionApi';
 import { COLORS } from '../../theme';
 
 export default function InstructorDashboardScreen({ route, navigation }) {
@@ -14,17 +15,20 @@ export default function InstructorDashboardScreen({ route, navigation }) {
 
   const [instructor,     setInstructor]     = useState(null);
   const [notifications,  setNotifications]  = useState([]);
+  const [sessions,       setSessions]       = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [refreshing,     setRefreshing]     = useState(false);
 
   const fetchData = async () => {
     try {
-      const [ins, notifs] = await Promise.all([
+      const [ins, notifs, sess] = await Promise.all([
         getInstructorById(instructorId),
         getNotifications(instructorId),
+        getSessions({ instructor: instructorId }),
       ]);
       setInstructor(ins.data);
       setNotifications(notifs.data);
+      setSessions(sess.data);
     } catch {
       Alert.alert('Error', 'Could not load data');
     } finally {
@@ -205,6 +209,46 @@ export default function InstructorDashboardScreen({ route, navigation }) {
             ))}
           </>
         )}
+
+        {/* Sessions */}
+        <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Your Sessions</Text>
+        {sessions.length === 0 ? (
+          <View style={styles.emptyNotif}>
+            <Ionicons name="calendar-outline" size={40} color={COLORS.textMuted} />
+            <Text style={styles.emptyText}>No sessions assigned</Text>
+          </View>
+        ) : (
+          sessions.map((s) => (
+            <View key={s._id} style={styles.sessionCard}>
+              <View style={styles.sessionTypeBadge}>
+                <Text style={styles.sessionTypeText}>{s.sessionType}</Text>
+              </View>
+              <View style={styles.flex1}>
+                <Text style={styles.sessionDate}>{new Date(s.date).toDateString()}</Text>
+                <Text style={styles.sessionTime}>{s.startTime} – {s.endTime}</Text>
+                <Text style={styles.sessionStudents}>{s.enrolledStudents?.length || 0} students enrolled</Text>
+              </View>
+              {s.status === 'Ongoing' && (
+                <TouchableOpacity
+                  style={styles.confirmBtn}
+                  onPress={() => navigation.navigate('ConfirmAttendance', {
+                    sessionId: s._id,
+                  })}
+                >
+                  <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.white} />
+                  <Text style={styles.confirmBtnText}>Confirm Attendance</Text>
+                </TouchableOpacity>
+              )}
+              <View style={[styles.statusBadge, {
+                backgroundColor: s.status === 'Ongoing' ? '#FFF3CD' : s.status === 'Completed' ? COLORS.greenBg : COLORS.bgLight,
+              }]}>
+                <Text style={[styles.statusBadgeText, {
+                  color: s.status === 'Ongoing' ? '#856404' : s.status === 'Completed' ? COLORS.green : COLORS.textMuted,
+                }]}>{s.status}</Text>
+              </View>
+            </View>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -250,4 +294,14 @@ const styles = StyleSheet.create({
   vehicleCard:{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.bgLight, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: COLORS.borderLight },
   vehicleName:{ fontSize: 14, fontWeight: '600', color: COLORS.black },
   vehiclePlate:{ fontSize: 12, fontWeight: '700', color: COLORS.brandOrange, marginTop: 2 },
+  sessionCard:{ flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: COLORS.white, borderRadius: 14, borderWidth: 1, borderColor: COLORS.border, padding: 14, marginBottom: 8 },
+  sessionTypeBadge:{ backgroundColor: COLORS.brandYellow, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  sessionTypeText:{ fontSize: 11, fontWeight: '700', color: COLORS.black },
+  sessionDate:{ fontSize: 14, fontWeight: '600', color: COLORS.black },
+  sessionTime:{ fontSize: 12, color: COLORS.textMuted, marginTop: 2 },
+  sessionStudents:{ fontSize: 11, color: COLORS.textMuted, marginTop: 2 },
+  confirmBtn:{ flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: COLORS.brandOrange, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6 },
+  confirmBtnText:{ fontSize: 12, fontWeight: '600', color: COLORS.white },
+  statusBadge:{ borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 },
+  statusBadgeText:{ fontSize: 11, fontWeight: '700' },
 });

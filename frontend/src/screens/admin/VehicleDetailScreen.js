@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, ActivityIndicator, Alert,
+  StyleSheet, ActivityIndicator, Alert, Modal, TextInput, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { getVehicleById, updateVehicleStatus, deleteVehicle } from '../../services/instructorVehicleApi';
+import { getVehicleById, updateVehicleStatus, deleteVehicle, addVehicleUsage } from '../../services/instructorVehicleApi';
 import { COLORS } from '../../theme';
 
 const statusColors = {
@@ -19,6 +19,9 @@ export default function VehicleDetailScreen({ navigation, route }) {
   const { vehicleId } = route.params;
   const [vehicle, setVehicle] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [usageModal, setUsageModal] = useState(false);
+  const [usageForm, setUsageForm] = useState({ km: '', duration: '', date: '', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchVehicle = async () => {
@@ -55,6 +58,30 @@ export default function VehicleDetailScreen({ navigation, route }) {
         },
       ]
     );
+  };
+
+  const handleLogUsage = async () => {
+    const { km, duration, date } = usageForm;
+    if (!km || !duration) {
+      Alert.alert('Validation', 'KM and Duration are required');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      await addVehicleUsage(vehicleId, {
+        km:       parseFloat(km),
+        duration: parseFloat(duration),
+        date:     date || new Date().toISOString(),
+        notes:    usageForm.notes,
+      });
+      setUsageModal(false);
+      setUsageForm({ km: '', duration: '', date: '', notes: '' });
+      Alert.alert('Success', 'Usage record logged successfully');
+    } catch {
+      Alert.alert('Error', 'Could not log usage');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleDelete = () => {
@@ -197,6 +224,15 @@ export default function VehicleDetailScreen({ navigation, route }) {
           </View>
         </View>
 
+        {/* Log Vehicle Usage */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Vehicle Usage</Text>
+          <TouchableOpacity style={styles.usageBtn} onPress={() => setUsageModal(true)}>
+            <Ionicons name="speedometer-outline" size={20} color={COLORS.white} />
+            <Text style={styles.usageBtnText}>Log Usage Record</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Delete Vehicle */}
         <View style={[styles.card, styles.dangerCard]}>
           <Text style={styles.sectionTitle}>Delete Vehicle</Text>
@@ -206,6 +242,68 @@ export default function VehicleDetailScreen({ navigation, route }) {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Log Usage Modal */}
+      <Modal visible={usageModal} transparent animationType="slide" onRequestClose={() => setUsageModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Log Usage Record</Text>
+              <TouchableOpacity onPress={() => setUsageModal(false)}>
+                <Ionicons name="close" size={24} color={COLORS.black} />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.formRow}>
+              <View style={styles.formHalf}>
+                <Text style={styles.formLabel}>KM Driven *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. 45"
+                  keyboardType="numeric"
+                  value={usageForm.km}
+                  onChangeText={(v) => setUsageForm({ ...usageForm, km: v })}
+                />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={styles.formHalf}>
+                <Text style={styles.formLabel}>Duration (mins) *</Text>
+                <TextInput
+                  style={styles.formInput}
+                  placeholder="e.g. 60"
+                  keyboardType="numeric"
+                  value={usageForm.duration}
+                  onChangeText={(v) => setUsageForm({ ...usageForm, duration: v })}
+                />
+              </View>
+            </View>
+            <Text style={styles.formLabel}>Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.formInput}
+              placeholder={new Date().toISOString().split('T')[0]}
+              value={usageForm.date}
+              onChangeText={(v) => setUsageForm({ ...usageForm, date: v })}
+            />
+            <Text style={[styles.formLabel, { marginTop: 12 }]}>Notes</Text>
+            <TextInput
+              style={[styles.formInput, { height: 70, textAlignVertical: 'top' }]}
+              placeholder="Optional notes..."
+              multiline
+              value={usageForm.notes}
+              onChangeText={(v) => setUsageForm({ ...usageForm, notes: v })}
+            />
+            <TouchableOpacity
+              style={[styles.submitBtn, submitting && { opacity: 0.6 }]}
+              onPress={handleLogUsage}
+              disabled={submitting}
+            >
+              {submitting
+                ? <ActivityIndicator size="small" color={COLORS.white} />
+                : <Text style={styles.submitBtnText}>Save Record</Text>
+              }
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -331,4 +429,45 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
   },
+  usageBtn: {
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 10,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  usageBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 14 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
+  modalSheet: {
+    backgroundColor: COLORS.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    paddingBottom: 40,
+  },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.black },
+  formRow: { flexDirection: 'row', marginBottom: 12 },
+  formHalf: { flex: 1 },
+  formLabel: { fontSize: 12, fontWeight: '600', color: COLORS.textDark, marginBottom: 4 },
+  formInput: {
+    backgroundColor: COLORS.bgLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  submitBtn: {
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  submitBtnText: { color: COLORS.white, fontWeight: '700', fontSize: 15 },
 });

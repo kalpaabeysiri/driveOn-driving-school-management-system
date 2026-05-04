@@ -12,8 +12,8 @@ import AdminHomeScreen      from '../screens/AdminHomeScreen';
 import InstructorHomeScreen     from '../screens/InstructorHomeScreen';
 import InstructorDashboardScreen from '../screens/instructor/InstructorDashboardScreen';
 import InstructorNotificationsScreen from '../screens/instructor/InstructorNotificationsScreen';
-import InstructorExamsScreen     from '../screens/instructor/InstructorExamsScreen';
-import InstructorExamDetailsScreen from '../screens/instructor/InstructorExamDetailsScreen';
+import InstructorExamsScreen     from '../../Exam and Student Managing/screens/instructor/InstructorExamsScreen';
+import InstructorExamDetailsScreen from '../../Exam and Student Managing/screens/instructor/InstructorExamDetailsScreen';
 import LearningScreen       from '../screens/learning/LearningScreen';
 import QuizScreen           from '../screens/learning/QuizScreen';
 import PaymentsScreen       from '../screens/payments/PaymentsScreen';
@@ -29,8 +29,8 @@ import AddEditStudentScreen  from '../screens/admin/AddEditStudentScreen';
 import MonthlyReportScreen   from '../screens/admin/MonthlyReportScreen';
 import StudentDashboard      from '../screens/student/StudentDashboardScreen';
 import StudentLearningScreen   from '../screens/student/learning/StudentLearningScreen';
-import StudentExamsScreen     from '../screens/student/StudentExamsScreen';
-import StudentExamDetailsScreen from '../screens/student/StudentExamDetailsScreen';
+import StudentExamsScreen     from '../../Exam and Student Managing/screens/student/StudentExamsScreen';
+import StudentExamDetailsScreen from '../../Exam and Student Managing/screens/student/StudentExamDetailsScreen';
 import AddEditInstructorScreen from '../screens/admin/AddEditInstructorScreen';
 import VehicleListScreen       from '../screens/admin/VehicleListScreen';
 import VehicleDetailScreen     from '../screens/admin/VehicleDetailScreen';
@@ -41,16 +41,16 @@ import VehicleUsageReportScreen from '../screens/admin/VehicleUsageReportScreen'
 import ExpiryAlertsScreen    from '../screens/admin/ExpiryAlertsScreen';
 
 // Exam System Imports
-import ExamDashboardScreen      from '../screens/admin/exam/ExamDashboardScreen';
-import TheoryExamListScreen     from '../screens/admin/exam/TheoryExamListScreen';
-import PracticalExamListScreen  from '../screens/admin/exam/PracticalExamListScreen';
-import ExamDetailsScreen        from '../screens/admin/exam/ExamDetailsScreen';
-import ProgressTrackingScreen   from '../screens/admin/exam/ProgressTrackingScreen';
-import CreateTheoryExamScreen   from '../screens/admin/exam/CreateTheoryExamScreen';
-import CreatePracticalExamScreen from '../screens/admin/exam/CreatePracticalExamScreen';
-import CreateExamScreen         from '../screens/admin/exam/CreateExamScreen';
-import EditTheoryExamScreen     from '../screens/admin/exam/EditTheoryExamScreen';
-import EditPracticalExamScreen  from '../screens/admin/exam/EditPracticalExamScreen';
+import ExamDashboardScreen      from '../../Exam and Student Managing/screens/admin/exam/ExamDashboardScreen';
+import TheoryExamListScreen     from '../../Exam and Student Managing/screens/admin/exam/TheoryExamListScreen';
+import PracticalExamListScreen  from '../../Exam and Student Managing/screens/admin/exam/PracticalExamListScreen';
+import ExamDetailsScreen        from '../../Exam and Student Managing/screens/admin/exam/ExamDetailsScreen';
+import ProgressTrackingScreen   from '../../Exam and Student Managing/screens/admin/exam/ProgressTrackingScreen';
+import CreateTheoryExamScreen   from '../../Exam and Student Managing/screens/admin/exam/CreateTheoryExamScreen';
+import CreatePracticalExamScreen from '../../Exam and Student Managing/screens/admin/exam/CreatePracticalExamScreen';
+import CreateExamScreen         from '../../Exam and Student Managing/screens/admin/exam/CreateExamScreen';
+import EditTheoryExamScreen     from '../../Exam and Student Managing/screens/admin/exam/EditTheoryExamScreen';
+import EditPracticalExamScreen  from '../../Exam and Student Managing/screens/admin/exam/EditPracticalExamScreen';
 
 import AdminSessionListScreen from '../screens/admin/AdminSessionListScreen';
 import AddEditSessionScreen   from '../screens/admin/AddEditSessionScreen';
@@ -67,6 +67,8 @@ import TakeAttendanceScreen      from '../screens/admin/TakeAttendanceScreen';
 import AttendanceAnalyticsScreen from '../screens/admin/AttendanceAnalyticsScreen';
 import StudentProgressScreen     from '../screens/admin/StudentProgressScreen';
 import AvailableSessionsScreen   from '../screens/student/AvailableSessionsScreen';
+import MarkAttendanceScreen     from '../screens/student/MarkAttendanceScreen';
+import ConfirmAttendanceScreen  from '../screens/instructor/ConfirmAttendanceScreen';
 
 import LearningCatalogScreen from '../screens/student/learning/LearningCatalogScreen';
 import LessonDetailScreen from '../screens/student/learning/LessonDetailScreen';
@@ -81,6 +83,10 @@ import AdminLessonDetailScreen  from '../screens/admin/learning/AdminLessonDetai
 import AdminQuizBuilderScreen   from '../screens/admin/learning/AdminQuizBuilderScreen';
 import AdminQuizAnalyticsScreen from '../screens/admin/learning/AdminQuizAnalyticsScreen';
 import CreateLearningContentScreen from '../screens/admin/learning/CreateLearningContentScreen';
+import AdminVideoUploadScreen   from '../screens/admin/learning/AdminVideoUploadScreen';
+import AdminLessonVideosScreen  from '../screens/admin/learning/AdminLessonVideosScreen';
+import AdminQuizLessonsScreen   from '../screens/admin/learning/AdminQuizLessonsScreen';
+import AdminLessonQuizzesScreen from '../screens/admin/learning/AdminLessonQuizzesScreen';
 
 // Staff Management Imports
 import StaffListScreen from '../screens/admin/staff/StaffListScreen';
@@ -228,6 +234,10 @@ export default function AppNavigator() {
         <Stack.Screen name="AdminQuizBuilder"      component={AdminQuizBuilderScreen} />
         <Stack.Screen name="AdminQuizAnalytics"    component={AdminQuizAnalyticsScreen} />
         <Stack.Screen name="CreateLearningContent" component={CreateLearningContentScreen} />
+        <Stack.Screen name="AdminVideoUpload"      component={AdminVideoUploadScreen} />
+        <Stack.Screen name="AdminLessonVideos"     component={AdminLessonVideosScreen} />
+        <Stack.Screen name="AdminQuizLessons"      component={AdminQuizLessonsScreen} />
+        <Stack.Screen name="AdminLessonQuizzes"    component={AdminLessonQuizzesScreen} />
         
         {/* Exam System Routes */}
         <Stack.Screen name="ExamDashboard"      component={ExamDashboardScreen} />
@@ -273,6 +283,7 @@ export default function AppNavigator() {
         <Stack.Screen name="AddPayment"  component={AddPaymentScreen} />
         <Stack.Screen name="BookSession" component={BookSessionScreen} />
         <Stack.Screen name="AvailableSessions" component={AvailableSessionsScreen} />
+        <Stack.Screen name="MarkAttendance" component={MarkAttendanceScreen} />
         <Stack.Screen name="LearningCatalog" component={LearningCatalogScreen} />
         <Stack.Screen name="StudentExams" component={StudentExamsScreen} />
         <Stack.Screen name="StudentExamDetails" component={StudentExamDetailsScreen} />
@@ -293,6 +304,7 @@ export default function AppNavigator() {
         <Stack.Screen name="InstructorNotifications" component={InstructorNotificationsScreen} />
         <Stack.Screen name="InstructorExams"         component={InstructorExamsScreen} />
         <Stack.Screen name="InstructorExamDetails"   component={InstructorExamDetailsScreen} />
+        <Stack.Screen name="ConfirmAttendance"       component={ConfirmAttendanceScreen} />
       </Stack.Navigator>
     );
   }

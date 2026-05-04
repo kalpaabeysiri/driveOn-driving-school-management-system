@@ -20,7 +20,10 @@ const submitFeedback = async (req, res) => {
     }
 
     // Check student was enrolled
-    if (!sessionDoc.enrolledStudents.includes(student)) {
+    const isEnrolled = sessionDoc.enrolledStudents.some(
+      (id) => id.toString() === student.toString()
+    );
+    if (!isEnrolled) {
       return res.status(403).json({ message: 'You were not enrolled in this session' });
     }
 

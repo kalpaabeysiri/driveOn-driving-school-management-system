@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, RefreshControl,
+  ActivityIndicator, Alert, RefreshControl, Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -13,15 +13,13 @@ export default function LessonDetailScreen({ route, navigation }) {
   const { user } = useAuth();
   const { topicId, topicTitle, lessons } = route.params || {};
   
-  // Debug log
-  console.log('LessonDetailScreen params:', { topicId, topicTitle, lessons });
-  
   const [currentLessonIndex, setCurrentLessonIndex] = useState(0);
   const [lesson, setLesson] = useState(null);
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [currentVideoIndex, setCurrentVideoIndex] = useState(0);
 
   const currentLesson = lessons?.[currentLessonIndex];
 
@@ -59,36 +57,21 @@ export default function LessonDetailScreen({ route, navigation }) {
     loadLessonData();
   }, [loadLessonData]);
 
-  const handleMarkComplete = async () => {
-    if (!lesson?._id) return;
-    
-    try {
-      await upsertLessonProgress(lesson._id, {
-        completionStatus: 'Completed',
-        progressPercentage: 100,
+  const handlePlayVideo = (video) => {
+    if (video.videoUrl) {
+      Linking.openURL(video.videoUrl).catch(() => {
+        Alert.alert('Error', 'Could not open video URL');
       });
-      
-      setIsCompleted(true);
-      Alert.alert('Success', 'Lesson marked as completed!');
-      
-      // Auto-advance to next lesson if available
-      if (currentLessonIndex < lessons.length - 1) {
-        setCurrentLessonIndex(currentLessonIndex + 1);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Could not mark lesson as completed');
+    } else {
+      Alert.alert('Video Info', 'This video is available for download only.');
     }
   };
 
-  const handleDownloadResource = (resource) => {
-    Alert.alert('Download', `Downloading ${resource.title}...`);
-    // In real app, implement actual download logic
-  };
-
+  
   const handleStartQuiz = () => {
     if (lesson?.quizzes?.length > 0) {
       const quiz = lesson.quizzes[0];
-      navigation.navigate('Quiz', { quizId: quiz._id, title: quiz.title });
+      navigation.navigate('LearningQuizTake', { quizId: quiz._id });
     }
   };
 
@@ -101,6 +84,27 @@ export default function LessonDetailScreen({ route, navigation }) {
   const goToNextLesson = () => {
     if (currentLessonIndex < lessons.length - 1) {
       setCurrentLessonIndex(currentLessonIndex + 1);
+    }
+  };
+
+  const handleMarkComplete = async () => {
+    if (!lesson?._id) return;
+    
+    try {
+      await upsertLessonProgress(lesson._id, {
+        completionStatus: 'Completed',
+        progressPercentage: 100,
+      });
+      
+      setIsCompleted(true);
+      Alert.alert('✅ Lesson Complete!', 'Great job! You can move to the next lesson.');
+      
+      // Auto-advance to next lesson if available
+      if (currentLessonIndex < lessons.length - 1) {
+        setTimeout(() => setCurrentLessonIndex(currentLessonIndex + 1), 1500);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Could not mark lesson as completed');
     }
   };
 
@@ -145,20 +149,12 @@ export default function LessonDetailScreen({ route, navigation }) {
           <Ionicons name="arrow-back" size={24} color={COLORS.black} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{topicTitle}</Text>
-        <TouchableOpacity style={styles.completeBtn} onPress={handleMarkComplete}>
-          <Ionicons 
-            name={isCompleted ? 'checkmark-circle' : 'radio-button-off'} 
-            size={20} 
-            color={isCompleted ? COLORS.green : COLORS.textMuted} 
-          />
-        </TouchableOpacity>
+        <View style={{ width: 24 }} />
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Lesson Navigation */}
         {lessons.length > 1 && (
@@ -214,69 +210,76 @@ export default function LessonDetailScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Video Player Placeholder */}
+        {/* Video Lessons */}
         {videos.length > 0 && (
           <View style={styles.videoSection}>
-            <Text style={styles.sectionTitle}>Video Lessons</Text>
+            <Text style={styles.sectionTitle}>📹 Video Tutorials</Text>
             {videos.map((video, index) => (
-              <TouchableOpacity key={video._id} style={styles.videoCard}>
+              <TouchableOpacity key={video._id} style={styles.videoCard} onPress={() => handlePlayVideo(video)}>
                 <View style={styles.videoThumbnail}>
                   <Ionicons name="play-circle" size={32} color={COLORS.white} />
                 </View>
                 <View style={styles.videoInfo}>
                   <Text style={styles.videoTitle}>{video.title}</Text>
-                  <Text style={styles.videoDescription}>{video.description}</Text>
-                  <Text style={styles.videoDuration}>{video.duration} min</Text>
+                  <Text style={styles.videoMeta}>{video.duration} min • {video.status || 'Available'}</Text>
+                  {video.videoUrl && (
+                    <Text style={styles.videoUrlHint}>🔗 External video</Text>
+                  )}
                 </View>
-                <Ionicons name="download-outline" size={20} color={COLORS.brandOrange} />
+                <View style={styles.playBtn}>
+                  <Ionicons name="play-outline" size={20} color={COLORS.brandOrange} />
+                </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* Lesson Notes */}
-        <View style={styles.notesSection}>
-          <Text style={styles.sectionTitle}>Lesson Notes</Text>
-          <View style={styles.noteCard}>
-            <Text style={styles.noteTitle}>Key Concepts</Text>
-            <Text style={styles.noteContent}>
-              {currentLesson.description || 'This lesson covers important driving concepts and safety practices. ' +
-               'Pay attention to all details as they will help you become a safe and responsible driver.'}
-            </Text>
+        {/* Completion Steps */}
+        <View style={styles.completionSection}>
+          <Text style={styles.sectionTitle}>✅ Complete This Lesson</Text>
+          <View style={styles.completionSteps}>
+            <View style={styles.step}>
+              <View style={[styles.stepNumber, isCompleted && styles.stepCompleted]}>
+                <Ionicons name="checkmark" size={12} color={COLORS.white} />
+              </View>
+              <Text style={styles.stepText}>Watch all videos</Text>
+            </View>
+            <View style={styles.step}>
+              <View style={[styles.stepNumber, isCompleted && styles.stepCompleted]}>
+                <Ionicons name="checkmark" size={12} color={COLORS.white} />
+              </View>
+              <Text style={styles.stepText}>Review lesson content</Text>
+            </View>
+            <View style={styles.step}>
+              <View style={[styles.stepNumber, isCompleted && styles.stepCompleted]}>
+                <Ionicons name="checkmark" size={12} color={COLORS.white} />
+              </View>
+              <Text style={styles.stepText}>Take the quiz (if available)</Text>
+            </View>
           </View>
+          
+          <TouchableOpacity 
+            style={[styles.completeLessonBtn, isCompleted && styles.completedBtn]} 
+            onPress={handleMarkComplete}
+            disabled={isCompleted}
+          >
+            <Ionicons 
+              name={isCompleted ? 'checkmark-circle' : 'radio-button-off'} 
+              size={20} 
+              color={COLORS.white} 
+            />
+            <Text style={styles.completeBtnText}>
+              {isCompleted ? 'Lesson Completed!' : 'Mark as Complete'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Learning Resources */}
-        {videos.length > 0 && (
-          <View style={styles.resourcesSection}>
-            <Text style={styles.sectionTitle}>Learning Resources</Text>
-            {videos.map((video) => (
-              <TouchableOpacity
-                key={video._id}
-                style={styles.resourceCard}
-                onPress={() => handleDownloadResource(video)}
-              >
-                <View style={styles.resourceIcon}>
-                  <Ionicons name="play-circle-outline" size={24} color={COLORS.brandOrange} />
-                </View>
-                <View style={styles.resourceInfo}>
-                  <Text style={styles.resourceTitle}>{video.title}</Text>
-                  <Text style={styles.resourceSize}>Video Tutorial</Text>
-                </View>
-                <TouchableOpacity style={styles.downloadBtn}>
-                  <Ionicons name="download-outline" size={20} color={COLORS.brandOrange} />
-                </TouchableOpacity>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
         {/* Quiz CTA */}
-        {lesson?.quizzes?.length > 0 && (
+        {lesson?.quizzes?.length > 0 && !isCompleted && (
           <View style={styles.quizSection}>
-            <Text style={styles.sectionTitle}>Test Your Knowledge</Text>
+            <Text style={styles.sectionTitle}>🎯 Test Your Knowledge</Text>
             <TouchableOpacity style={styles.quizCta} onPress={handleStartQuiz}>
-              <Ionicons name="help-circle" size={24} color={COLORS.white} />
+              <Ionicons name="help-circle" size={20} color={COLORS.white} />
               <Text style={styles.quizCtaText}>Start Quiz</Text>
               <Ionicons name="arrow-forward" size={16} color={COLORS.white} />
             </TouchableOpacity>
@@ -367,8 +370,8 @@ const styles = StyleSheet.create({
   },
   
   // Video Section
-  videoSection: { marginBottom: 32 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: COLORS.black, marginBottom: 16 },
+  videoSection: { marginBottom: 24 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: COLORS.black, marginBottom: 12 },
   videoCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -376,71 +379,70 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: COLORS.border,
-    padding: 16,
-    marginBottom: 12,
+    padding: 14,
+    marginBottom: 10,
   },
   videoThumbnail: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     borderRadius: 8,
     backgroundColor: COLORS.black,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   videoInfo: { flex: 1 },
   videoTitle: { fontSize: 14, fontWeight: '600', color: COLORS.black, marginBottom: 4 },
-  videoDescription: { fontSize: 12, color: COLORS.textMuted, marginBottom: 4 },
-  videoDuration: { fontSize: 12, color: COLORS.textMuted },
-  
-  // Notes Section
-  notesSection: { marginBottom: 32 },
-  noteCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 16,
+  videoMeta: { fontSize: 12, color: COLORS.textMuted, marginBottom: 2 },
+  videoUrlHint: { fontSize: 10, color: COLORS.brandOrange, fontWeight: '500' },
+  playBtn: {
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 8,
+    padding: 8,
   },
-  noteTitle: { fontSize: 16, fontWeight: '600', color: COLORS.black, marginBottom: 8 },
-  noteContent: { fontSize: 14, color: COLORS.textMuted, lineHeight: 20 },
-  
-  // Resources Section
-  resourcesSection: { marginBottom: 32 },
-  resourceCard: {
+
+  // Completion Section
+  completionSection: { marginBottom: 24 },
+  completionSteps: { gap: 12, marginBottom: 16 },
+  step: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    padding: 16,
-    marginBottom: 12,
+    gap: 12,
   },
-  resourceIcon: {
-    width: 48,
-    height: 48,
+  stepNumber: {
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    backgroundColor: COLORS.brandOrange + '20',
+    backgroundColor: COLORS.bgLight,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
   },
-  resourceInfo: { flex: 1 },
-  resourceTitle: { fontSize: 14, fontWeight: '600', color: COLORS.black, marginBottom: 4 },
-  resourceSize: { fontSize: 12, color: COLORS.textMuted },
-  downloadBtn: { padding: 8 },
-  
+  stepCompleted: { backgroundColor: COLORS.green },
+  stepText: { fontSize: 14, color: COLORS.black, fontWeight: '500' },
+  completeLessonBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: COLORS.brandOrange,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  completedBtn: { backgroundColor: COLORS.green },
+  completeBtnText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+
   // Quiz Section
-  quizSection: { marginBottom: 32 },
+  quizSection: { marginBottom: 24 },
   quizCta: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: COLORS.brandOrange,
-    borderRadius: 16,
-    paddingVertical: 16,
-    gap: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    gap: 10,
   },
-  quizCtaText: { fontSize: 16, fontWeight: '700', color: COLORS.white },
+  quizCtaText: { fontSize: 15, fontWeight: '700', color: COLORS.white },
 });

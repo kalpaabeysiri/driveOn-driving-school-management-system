@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  ActivityIndicator, Alert, RefreshControl, Share,
+  ActivityIndicator, Alert, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { COLORS } from '../../../../theme';
 import { getStudentPerformance } from '../../../../services/learningApi';
 import { useAuth } from '../../../../context/AuthContext';
@@ -35,25 +37,420 @@ export default function PerformanceTab({ navigation }) {
     loadPerformanceData();
   }, [loadPerformanceData]);
 
-  const generateReport = async () => {
+  const generatePDFReport = async () => {
     try {
-      const reportData = {
-        student: user.name,
-        date: new Date().toLocaleDateString(),
-        performance: performanceData,
-      };
+      const studentName = user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || 'Student';
+      const date = new Date().toLocaleDateString();
       
-      await Share.share({
-        message: `📊 Performance Report for ${user.name}\n\n` +
-                 `Average Score: ${performanceData.overallStats.averageScore}%\n` +
-                 `Quizzes Passed: ${performanceData.overallStats.passedQuizzes}/${performanceData.overallStats.totalQuizzes}\n` +
-                 `Study Time: ${performanceData.overallStats.studyTime} hours\n` +
-                 `Attendance: Theory ${performanceData.attendance.theory.percentage}%, Practical ${performanceData.attendance.practical.percentage}%\n\n` +
-                 `Generated on ${new Date().toLocaleDateString()}`,
-        title: 'Learning Performance Report',
+      // Build quiz performance HTML
+      let quizPerformanceHTML = '';
+      if (performanceData.quizPerformanceByLesson?.length > 0) {
+        quizPerformanceHTML = performanceData.quizPerformanceByLesson.map(lesson => {
+          const quizzesHTML = lesson.quizzes.map(quiz => {
+            const attemptsHTML = quiz.attempts.map(attempt => `
+              <span class="attempt-badge ${attempt.status === 'Passed' ? 'attempt-passed' : 'attempt-failed'}">
+                #${attempt.attemptNumber}: ${attempt.score}%
+              </span>
+            `).join('');
+            
+            return `
+              <div class="quiz-item">
+                <div class="quiz-header">
+                  <span class="quiz-title">${quiz.quizTitle}</span>
+                  <span class="best-score ${quiz.passed ? 'score-passed' : 'score-failed'}">Best: ${quiz.bestScore}%</span>
+                </div>
+                <div class="attempts-row">${attemptsHTML}</div>
+              </div>
+            `;
+          }).join('');
+          
+          return `
+            <div class="lesson-card">
+              <div class="lesson-header">
+                <span class="lesson-title">${lesson.lesson}</span>
+                <span class="lesson-summary">${lesson.totalQuizzes} quizzes • ${lesson.totalAttempts} attempts</span>
+              </div>
+              <div class="quiz-list">${quizzesHTML}</div>
+            </div>
+          `;
+        }).join('');
+      } else {
+        quizPerformanceHTML = '<p style="text-align: center; color: #666;">No quiz attempts yet</p>';
+      }
+      
+      // Build recent activity HTML
+      let activityHTML = '';
+      if (performanceData.recentActivity?.length > 0) {
+        activityHTML = performanceData.recentActivity.map(item => `
+          <div class="activity-item">
+            <span class="activity-icon">${item.type === 'quiz' ? '📝' : '✅'}</span>
+            <div class="activity-content">
+              <span class="activity-title">${item.title}</span>
+              <span class="activity-date">${item.date}</span>
+            </div>
+            ${item.type === 'quiz' ? `<span class="activity-score">${item.score}%</span>` : ''}
+          </div>
+        `).join('');
+      }
+      
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Performance Report - ${studentName}</title>
+          <style>
+            body {
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              padding: 40px;
+              background: #fff;
+            }
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #F97316;
+            }
+            .header h1 {
+              color: #F97316;
+              font-size: 28px;
+              margin-bottom: 10px;
+            }
+            .student-name {
+              font-size: 22px;
+              font-weight: bold;
+              color: #333;
+            }
+            .report-date {
+              color: #666;
+              font-size: 14px;
+            }
+            .section {
+              margin-bottom: 30px;
+            }
+            .section-title {
+              font-size: 18px;
+              font-weight: bold;
+              color: #333;
+              margin-bottom: 15px;
+              padding-bottom: 8px;
+              border-bottom: 1px solid #eee;
+            }
+            .stats-grid {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 15px;
+              margin-bottom: 20px;
+            }
+            .stat-card {
+              flex: 1;
+              min-width: 120px;
+              background: #f9f9f9;
+              border-radius: 12px;
+              padding: 15px;
+              text-align: center;
+              border: 1px solid #eee;
+            }
+            .stat-value {
+              font-size: 24px;
+              font-weight: bold;
+              color: #F97316;
+            }
+            .stat-label {
+              font-size: 12px;
+              color: #666;
+              margin-top: 5px;
+            }
+            .lesson-card {
+              background: #fff;
+              border: 1px solid #eee;
+              border-radius: 12px;
+              padding: 15px;
+              margin-bottom: 15px;
+            }
+            .lesson-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 10px;
+              padding-bottom: 10px;
+              border-bottom: 1px solid #eee;
+            }
+            .lesson-title {
+              font-weight: bold;
+              font-size: 16px;
+              color: #333;
+            }
+            .lesson-summary {
+              font-size: 12px;
+              color: #666;
+            }
+            .quiz-item {
+              background: #f9f9f9;
+              border-radius: 8px;
+              padding: 12px;
+              margin-bottom: 10px;
+            }
+            .quiz-header {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              margin-bottom: 8px;
+            }
+            .quiz-title {
+              font-weight: 600;
+              font-size: 14px;
+            }
+            .best-score {
+              font-size: 12px;
+              padding: 4px 8px;
+              border-radius: 4px;
+              font-weight: bold;
+            }
+            .score-passed {
+              background: #DCFCE7;
+              color: #16A34A;
+            }
+            .score-failed {
+              background: #FEE2E2;
+              color: #DC2626;
+            }
+            .attempts-row {
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+            }
+            .attempt-badge {
+              font-size: 11px;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-weight: 600;
+            }
+            .attempt-passed {
+              background: #DCFCE7;
+              color: #16A34A;
+            }
+            .attempt-failed {
+              background: #FEE2E2;
+              color: #DC2626;
+            }
+            .attendance-card {
+              background: #f9f9f9;
+              border-radius: 12px;
+              padding: 15px;
+              margin-bottom: 15px;
+            }
+            .attendance-header {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 10px;
+            }
+            .attendance-title {
+              font-weight: 600;
+            }
+            .attendance-bar {
+              height: 8px;
+              background: #eee;
+              border-radius: 4px;
+              margin: 10px 0;
+            }
+            .attendance-fill {
+              height: 100%;
+              background: #22C55E;
+              border-radius: 4px;
+            }
+            .attendance-percentage {
+              font-size: 14px;
+              font-weight: bold;
+              color: #22C55E;
+            }
+            .eligibility-card {
+              border-radius: 12px;
+              padding: 20px;
+              margin-bottom: 20px;
+            }
+            .eligibility-pass {
+              background: #DCFCE7;
+              border: 2px solid #86EFAC;
+            }
+            .eligibility-fail {
+              background: #FEE2E2;
+              border: 2px solid #FECACA;
+            }
+            .eligibility-header {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 15px;
+            }
+            .eligibility-status {
+              font-size: 18px;
+              font-weight: bold;
+            }
+            .requirement-item {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              margin-bottom: 8px;
+              font-size: 13px;
+            }
+            .check-pass { color: #16A34A; }
+            .check-fail { color: #DC2626; }
+            .activity-item {
+              display: flex;
+              align-items: center;
+              gap: 12px;
+              padding: 10px 0;
+              border-bottom: 1px solid #eee;
+            }
+            .activity-icon {
+              font-size: 20px;
+            }
+            .activity-content {
+              flex: 1;
+            }
+            .activity-title {
+              font-weight: 600;
+              font-size: 14px;
+            }
+            .activity-date {
+              font-size: 12px;
+              color: #666;
+            }
+            .activity-score {
+              font-weight: bold;
+              color: #F97316;
+            }
+            .footer {
+              margin-top: 40px;
+              text-align: center;
+              font-size: 12px;
+              color: #999;
+              padding-top: 20px;
+              border-top: 1px solid #eee;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h1>Performance Report</h1>
+            <div class="student-name">${studentName}</div>
+            <div class="report-date">Generated on ${date}</div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Overall Performance</div>
+            <div class="stats-grid">
+              <div class="stat-card">
+                <div class="stat-value">${performanceData.overallStats.averageScore}%</div>
+                <div class="stat-label">Average Score</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${performanceData.overallStats.passedQuizzes}/${performanceData.overallStats.totalQuizzes}</div>
+                <div class="stat-label">Quizzes Passed</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${performanceData.overallStats.studyTime}h</div>
+                <div class="stat-label">Study Time</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value">${performanceData.overallStats.totalAttempts}</div>
+                <div class="stat-label">Total Attempts</div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Quiz Performance by Lesson</div>
+            ${quizPerformanceHTML}
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Attendance Tracking</div>
+            <div class="attendance-card">
+              <div class="attendance-header">
+                <span>Theory</span>
+                <span class="attendance-title">Theory Sessions</span>
+              </div>
+              <div>${performanceData.attendance.theory.attended}/${performanceData.attendance.theory.total} attended</div>
+              <div class="attendance-bar">
+                <div class="attendance-fill" style="width: ${performanceData.attendance.theory.percentage}%"></div>
+              </div>
+              <div class="attendance-percentage">${performanceData.attendance.theory.percentage}%</div>
+            </div>
+            <div class="attendance-card">
+              <div class="attendance-header">
+                <span>Practical</span>
+                <span class="attendance-title">Practical Sessions</span>
+              </div>
+              <div>${performanceData.attendance.practical.attended}/${performanceData.attendance.practical.total} attended</div>
+              <div class="attendance-bar">
+                <div class="attendance-fill" style="width: ${performanceData.attendance.practical.percentage}%"></div>
+              </div>
+              <div class="attendance-percentage">${performanceData.attendance.practical.percentage}%</div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Exam Eligibility Status</div>
+            <div class="eligibility-card ${performanceData.examEligibility.eligible ? 'eligibility-pass' : 'eligibility-fail'}">
+              <div class="eligibility-header">
+                <span style="font-size: 24px;">${performanceData.examEligibility.eligible ? 'Eligible' : 'Not Eligible'}</span>
+                <span class="eligibility-status" style="color: ${performanceData.examEligibility.eligible ? '#16A34A' : '#DC2626'}">
+                  ${performanceData.examEligibility.eligible ? 'Eligible for Exam' : 'Not Yet Eligible'}
+                </span>
+              </div>
+              <div class="requirement-item">
+                <span class="${performanceData.examEligibility.status.quizScoreMet ? 'check-pass' : 'check-fail'}">
+                  ${performanceData.examEligibility.status.quizScoreMet ? 'Yes' : 'No'}
+                </span>
+                <span>Minimum quiz score (${performanceData.examEligibility.requirements.minimumQuizScore}%)</span>
+              </div>
+              <div class="requirement-item">
+                <span class="${performanceData.examEligibility.status.attendanceMet ? 'check-pass' : 'check-fail'}">
+                  ${performanceData.examEligibility.status.attendanceMet ? 'Yes' : 'No'}
+                </span>
+                <span>Minimum attendance (${performanceData.examEligibility.requirements.minimumAttendance}%)</span>
+              </div>
+              <div class="requirement-item">
+                <span class="${performanceData.examEligibility.status.theoryCompleted ? 'check-pass' : 'check-fail'}">
+                  ${performanceData.examEligibility.status.theoryCompleted ? 'Yes' : 'No'}
+                </span>
+                <span>Theory sessions completed (${performanceData.examEligibility.requirements.completedTheory})</span>
+              </div>
+              <div class="requirement-item">
+                <span class="${performanceData.examEligibility.status.practicalCompleted ? 'check-pass' : 'check-fail'}">
+                  ${performanceData.examEligibility.status.practicalCompleted ? 'Yes' : 'No'}
+                </span>
+                <span>Practical sessions completed (${performanceData.examEligibility.requirements.completedPractical})</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section">
+            <div class="section-title">Recent Activity</div>
+            ${activityHTML || '<p style="color: #666;">No recent activity</p>'}
+          </div>
+          
+          <div class="footer">
+            <p>This report was generated automatically by the DriveOn Learning Management System.</p>
+            <p>For any questions, please contact your instructor or administrator.</p>
+          </div>
+        </body>
+        </html>
+      `;
+      
+      const { uri } = await Print.printToFileAsync({ html: htmlContent });
+      await Sharing.shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share Performance Report',
+        UTI: 'com.adobe.pdf',
       });
     } catch (error) {
-      Alert.alert('Error', 'Could not generate report');
+      Alert.alert('Error', 'Could not generate PDF report');
     }
   };
 
@@ -65,23 +462,42 @@ export default function PerformanceTab({ navigation }) {
     </View>
   );
 
-  const renderQuizScoreItem = (item) => (
-    <View key={item.quiz} style={styles.scoreItem}>
-      <View style={styles.scoreInfo}>
-        <Text style={styles.scoreQuizTitle}>{item.quiz}</Text>
-        <Text style={styles.scoreAverage}>Avg: {item.average.toFixed(1)}%</Text>
+  const renderAttemptBadge = (attempt) => (
+    <View key={attempt.attemptNumber} style={[styles.attemptBadge, attempt.status === 'Passed' ? styles.attemptPassed : styles.attemptFailed]}>
+      <Text style={styles.attemptNumber}>#{attempt.attemptNumber}</Text>
+      <Text style={styles.attemptScore}>{attempt.score}%</Text>
+    </View>
+  );
+
+  const renderQuizItem = (quiz) => (
+    <View key={quiz.quizTitle} style={styles.quizItem}>
+      <View style={styles.quizHeader}>
+        <Ionicons name="help-circle-outline" size={16} color={quiz.passed ? COLORS.green : COLORS.brandOrange} />
+        <Text style={styles.quizTitle}>{quiz.quizTitle}</Text>
+        <View style={[styles.bestScoreBadge, quiz.passed ? styles.bestScorePassed : styles.bestScoreFailed]}>
+          <Text style={styles.bestScoreText}>Best: {quiz.bestScore}%</Text>
+        </View>
       </View>
-      <View style={styles.scoreTrend}>
-        {item.trend === 'up' && <Ionicons name="trending-up" size={16} color={COLORS.green} />}
-        {item.trend === 'down' && <Ionicons name="trending-down" size={16} color={COLORS.red} />}
-        {item.trend === 'stable' && <Ionicons name="remove" size={16} color={COLORS.textMuted} />}
-        {item.trend === 'not_attempted' && <Ionicons name="help-outline" size={16} color={COLORS.textMuted} />}
+      <Text style={styles.attemptCount}>{quiz.totalAttempts} attempt{quiz.totalAttempts !== 1 ? 's' : ''}</Text>
+      <View style={styles.attemptsRow}>
+        {quiz.attempts.map(renderAttemptBadge)}
       </View>
-      <View style={styles.scoreBars}>
-        {item.scores.map((score, index) => (
-          <View key={index} style={[styles.scoreBar, { height: `${score}%`, backgroundColor: score >= 75 ? COLORS.green : COLORS.brandOrange }]} />
-        ))}
-        {item.scores.length === 0 && <View style={[styles.scoreBar, { height: 4, backgroundColor: COLORS.bgLight }]} />}
+    </View>
+  );
+
+  const renderLessonItem = (lesson) => (
+    <View key={lesson.lesson} style={styles.lessonCard}>
+      <View style={styles.lessonHeader}>
+        <Ionicons name="book-outline" size={20} color={COLORS.brandOrange} />
+        <Text style={styles.lessonTitle}>{lesson.lesson}</Text>
+        <View style={styles.lessonSummary}>
+          <Text style={styles.lessonSummaryText}>{lesson.totalQuizzes} quizzes</Text>
+          <Text style={styles.lessonSummaryDot}>•</Text>
+          <Text style={styles.lessonSummaryText}>{lesson.totalAttempts} attempts</Text>
+        </View>
+      </View>
+      <View style={styles.quizList}>
+        {lesson.quizzes.map(renderQuizItem)}
       </View>
     </View>
   );
@@ -146,11 +562,15 @@ export default function PerformanceTab({ navigation }) {
           </View>
         </View>
 
-        {/* Quiz Scores Summary */}
+        {/* Quiz Performance by Lesson */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quiz Performance</Text>
-          <View style={styles.scoreList}>
-            {performanceData.quizScores.map(renderQuizScoreItem)}
+          <Text style={styles.sectionTitle}>Quiz Performance by Lesson</Text>
+          <View style={styles.lessonList}>
+            {performanceData.quizPerformanceByLesson?.length > 0 ? (
+              performanceData.quizPerformanceByLesson.map(renderLessonItem)
+            ) : (
+              <Text style={styles.emptySectionText}>No quiz attempts yet</Text>
+            )}
           </View>
         </View>
 
@@ -245,9 +665,9 @@ export default function PerformanceTab({ navigation }) {
         </View>
 
         {/* Generate Report Button */}
-        <TouchableOpacity style={styles.generateReportBtn} onPress={generateReport}>
+        <TouchableOpacity style={styles.generateReportBtn} onPress={generatePDFReport}>
           <Ionicons name="document-text-outline" size={20} color={COLORS.white} />
-          <Text style={styles.generateReportText}>Generate Performance Report</Text>
+          <Text style={styles.generateReportText}>Generate PDF Report</Text>
           <Ionicons name="share-outline" size={16} color={COLORS.white} />
         </TouchableOpacity>
       </ScrollView>
@@ -284,30 +704,70 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 20, fontWeight: '800', color: COLORS.black },
   statLabel: { fontSize: 12, color: COLORS.textMuted, textAlign: 'center' },
   
-  // Quiz Scores
-  scoreList: { gap: 12 },
-  scoreItem: {
+  // Hierarchical: Lessons → Quizzes → Attempts
+  lessonList: { gap: 16 },
+  lessonCard: {
     backgroundColor: COLORS.white,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: COLORS.border,
     padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
-  scoreInfo: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  scoreQuizTitle: { fontSize: 14, fontWeight: '600', color: COLORS.black },
-  scoreAverage: { fontSize: 12, color: COLORS.textMuted },
-  scoreTrend: { alignItems: 'center' },
-  scoreBars: {
+  lessonHeader: {
     flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  lessonTitle: { fontSize: 17, fontWeight: '800', color: COLORS.black, flex: 1 },
+  lessonSummary: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  lessonSummaryText: { fontSize: 12, color: COLORS.textMuted, fontWeight: '600' },
+  lessonSummaryDot: { fontSize: 12, color: COLORS.textMuted },
+  quizList: { gap: 12 },
+  quizItem: {
+    backgroundColor: COLORS.bgLight,
+    borderRadius: 12,
+    padding: 12,
+  },
+  quizHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  quizTitle: { fontSize: 14, fontWeight: '700', color: COLORS.black, flex: 1 },
+  bestScoreBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  bestScorePassed: { backgroundColor: '#DCFCE7' },
+  bestScoreFailed: { backgroundColor: '#FEE2E2' },
+  bestScoreText: { fontSize: 11, fontWeight: '700', color: COLORS.black },
+  attemptCount: { fontSize: 11, color: COLORS.textMuted, marginBottom: 8 },
+  attemptsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  attemptBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 4,
-    alignItems: 'flex-end',
-    height: 20,
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
   },
-  scoreBar: {
-    width: 8,
-    borderRadius: 4,
-    minHeight: 4,
-  },
+  attemptPassed: { backgroundColor: '#DCFCE7', borderColor: '#86EFAC' },
+  attemptFailed: { backgroundColor: '#FEE2E2', borderColor: '#FECACA' },
+  attemptNumber: { fontSize: 10, fontWeight: '700', color: COLORS.textMuted },
+  attemptScore: { fontSize: 12, fontWeight: '800', color: COLORS.black },
+  emptySectionText: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center', paddingVertical: 20 },
   
   // Attendance
   attendanceCards: { gap: 12 },

@@ -28,6 +28,11 @@ const createLesson = async (req, res) => {
       lessonData.topic = topic;
     }
 
+    // Shift lessons at same or higher order within the same topic down by 1
+    const shiftFilter = { displayOrder: { $gte: lessonData.displayOrder } };
+    if (topic) shiftFilter.topic = topic;
+    await LearningLesson.updateMany(shiftFilter, { $inc: { displayOrder: 1 } });
+
     const lesson = await LearningLesson.create(lessonData);
 
     res.status(201).json(lesson);
@@ -102,11 +107,49 @@ const deleteLesson = async (req, res) => {
   try {
     const lesson = await LearningLesson.findById(req.params.id);
     if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
+
+    const deletedOrder = lesson.displayOrder;
+    const topicId = lesson.topic;
     await lesson.deleteOne();
+
+    // Shift lessons below deleted position up by 1 within same topic
+    const shiftFilter = { displayOrder: { $gt: deletedOrder } };
+    if (topicId) shiftFilter.topic = topicId;
+    await LearningLesson.updateMany(shiftFilter, { $inc: { displayOrder: -1 } });
+
     res.json({ message: 'Lesson deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 };
 
-module.exports = { createLesson, getLessons, getLessonById, updateLesson, deleteLesson };
+// @desc   Reorder lessons sequentially per topic
+// @route  POST /api/learning/lessons/reorder
+const reorderLessons = async (req, res) => {
+  try {
+    const { topicId } = req.query;
+    const filter = topicId ? { topic: topicId } : {};
+    const lessons = await LearningLesson.find(filter).sort({ displayOrder: 1, createdAt: 1 });
+    const updates = lessons.map((l, i) =>
+      LearningLesson.findByIdAndUpdate(l._id, { displayOrder: i + 1 })
+    );
+    await Promise.all(updates);
+    res.json({ message: `Reordered ${lessons.length} lessons` });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc   Delete all lessons by topic (Admin)
+// @route  DELETE /api/learning/lessons/all/:topicId
+const deleteAllLessons = async (req, res) => {
+  try {
+    const { topicId } = req.params;
+    const result = await LearningLesson.deleteMany({ topic: topicId });
+    res.json({ message: 'All lessons deleted', deletedCount: result.deletedCount });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = { createLesson, getLessons, getLessonById, updateLesson, deleteLesson, reorderLessons, deleteAllLessons };

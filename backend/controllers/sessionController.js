@@ -61,7 +61,7 @@ const getSessions = async (req, res) => {
       .populate('vehicle',          'brand model licensePlate')
       .populate('enrolledStudents', 'firstName lastName email')
       .populate('createdBy',        'name')
-      .sort({ date: 1 });
+      .sort({ createdAt: -1 });
 
     res.json(sessions);
   } catch (error) {
@@ -153,7 +153,8 @@ const deleteSession = async (req, res) => {
 const bookSession = async (req, res) => {
   try {
     const studentId = req.user.id; // from JWT token
-    const session = await Session.findById(req.params.id);
+    const session = await Session.findById(req.params.id)
+      .populate('instructor', 'fullName');
     if (!session) return res.status(404).json({ message: 'Session not found' });
 
     if (session.status !== 'Scheduled') {
@@ -170,6 +171,20 @@ const bookSession = async (req, res) => {
     await session.save();
 
     await Student.findByIdAndUpdate(studentId, { $push: { bookedSessions: session._id } });
+
+    // Create notification for instructor
+    const Notification = require('../models/Notification');
+    const student = await Student.findById(studentId).select('firstName lastName');
+    if (session.instructor) {
+      await Notification.create({
+        message: `${student.firstName} ${student.lastName} has booked your ${session.sessionType} session`,
+        type: 'SessionBooking',
+        priority: 'Normal',
+        instructor: session.instructor._id,
+        status: 'Unread',
+        sentVia: 'InApp',
+      });
+    }
 
     res.json({
       message: 'Session booked successfully!',
@@ -251,9 +266,10 @@ const removeStudent = async (req, res) => {
 // ── GET AVAILABLE SESSIONS (for students to browse) ───────────────────────────
 const getAvailableSessions = async (req, res) => {
   try {
-    const today = new Date();
-    today.setUTCHours(0, 0, 0, 0); // compare date only, not time-of-day
-    const sessions = await Session.find({ date: { $gte: today }, status: { $in: ['Scheduled', 'Ongoing'] } })
+    // Do not apply a UTC "today" cutoff here.
+    // Session dates are stored as date-only values from clients in different timezones,
+    // so UTC midnight filtering can hide same-day sessions unexpectedly.
+    const sessions = await Session.find({ status: { $in: ['Scheduled', 'Ongoing'] } })
       .populate('instructor', 'fullName specialization')
       .populate('vehicle', 'brand model licensePlate')
       .sort({ date: 1 });
@@ -269,11 +285,29 @@ const getAvailableSessions = async (req, res) => {
 const getMyBookedSessions = async (req, res) => {
   try {
     const studentId = req.user.id;
+    const Feedback = require('../models/Feedback');
+    
+    // Get student's feedbacks to check which sessions have feedback
+    const studentFeedbacks = await Feedback.find({ student: studentId }).select('session rating comment');
+    const feedbackSessionIds = studentFeedbacks.map(f => f.session.toString());
+    const feedbackMap = {};
+    studentFeedbacks.forEach(f => {
+      feedbackMap[f.session.toString()] = { rating: f.rating, comment: f.comment };
+    });
+
     const sessions = await Session.find({ enrolledStudents: studentId })
       .populate('instructor', 'fullName contactNumber')
       .populate('vehicle',    'brand model licensePlate')
       .sort({ date: -1 });
-    res.json(sessions);
+    
+    // Add hasFeedback flag and rating to each session
+    const sessionsWithFeedback = sessions.map(session => ({
+      ...session.toObject(),
+      hasFeedback: feedbackSessionIds.includes(session._id.toString()),
+      myFeedback: feedbackMap[session._id.toString()] || null,
+    }));
+    
+    res.json(sessionsWithFeedback);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

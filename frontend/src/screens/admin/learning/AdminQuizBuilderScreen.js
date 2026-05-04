@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   ActivityIndicator, Alert, TextInput, KeyboardAvoidingView,
-  Platform,
+  Platform, I18nManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,6 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
 
   const [loading, setLoading] = useState(!!quizId);
   const [saving, setSaving] = useState(false);
-
   const [meta, setMeta] = useState({
     title: '',
     description: '',
@@ -37,6 +36,7 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
     timeLimit: '15',
     attemptLimit: '1',
     status: 'Draft',
+    language: 'en',
   });
   const [questions, setQuestions] = useState([makeEmptyQuestion()]);
 
@@ -53,6 +53,7 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
         timeLimit: String(data.timeLimit ?? 15),
         attemptLimit: String(data.attemptLimit ?? 1),
         status: data.status || 'Draft',
+        language: data.language || 'en',
       });
       setQuestions(
         (data.questions || []).map((q) => ({
@@ -132,10 +133,14 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
         timeLimit: parseInt(meta.timeLimit || '0', 10),
         attemptLimit: parseInt(meta.attemptLimit || '1', 10),
         status: meta.status,
+        language: meta.language,
         questions: questions.map((q) => ({
           questionText: q.questionText.trim(),
           marks: parseInt(q.marks || '0', 10),
-          options: q.options.map((o) => ({ optionText: o.optionText.trim(), isCorrect: !!o.isCorrect })),
+          options: q.options.map((o) => ({
+            optionText: o.optionText.trim(),
+            isCorrect: !!o.isCorrect,
+          })),
         })),
       };
 
@@ -169,7 +174,12 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <KeyboardAvoidingView
+        style={styles.flex1}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.sectionTitle}>Quiz Details</Text>
 
         <Text style={styles.label}>Title *</Text>
@@ -199,6 +209,27 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
             <Text style={styles.label}>Attempt limit</Text>
             <TextInput style={styles.input} value={meta.attemptLimit} keyboardType="numeric" onChangeText={(v) => setMeta((p) => ({ ...p, attemptLimit: v.replace(/[^0-9]/g, '') }))} />
           </View>
+          <View style={styles.flex1}>
+            <Text style={styles.label}>Quiz Language</Text>
+            <View style={styles.chipRow}>
+              {[
+                { key: 'en', label: 'English' },
+                { key: 'si', label: 'සිංහල' },
+                { key: 'both', label: 'Both' },
+              ].map((s) => (
+                <TouchableOpacity
+                  key={s.key}
+                  style={[styles.chip, meta.language === s.key && styles.chipActive]}
+                  onPress={() => setMeta((p) => ({ ...p, language: s.key }))}
+                >
+                  <Text style={[styles.chipText, meta.language === s.key && styles.chipTextActive]}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.row}>
           <View style={styles.flex1}>
             <Text style={styles.label}>Status</Text>
             <View style={styles.chipRow}>
@@ -234,11 +265,13 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
               )}
             </View>
 
-            <Text style={styles.label}>Question text *</Text>
+            {/* Single Question Input - Language determined by quiz language setting */}
+            <Text style={styles.label}>Question *</Text>
             <TextInput
               style={styles.input}
               value={q.questionText}
               onChangeText={(v) => setQuestions((prev) => prev.map((x, i) => i === qIdx ? { ...x, questionText: v } : x))}
+              placeholder="Enter question"
             />
 
             <View style={styles.row}>
@@ -294,6 +327,7 @@ export default function AdminQuizBuilderScreen({ route, navigation }) {
           {saving ? <ActivityIndicator color={COLORS.white} /> : <Text style={styles.saveText}>Save Quiz</Text>}
         </TouchableOpacity>
       </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

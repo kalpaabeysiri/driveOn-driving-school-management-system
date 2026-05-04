@@ -5,26 +5,26 @@ const { protect, adminOnly } = require('../middleware/auth');
 const videoUpload = require('../middleware/videoUpload');
 
 const {
-  createTopic, getTopics, getTopicById, updateTopic, deleteTopic,
+  createTopic, getTopics, getTopicById, updateTopic, deleteTopic, reorderTopics, deleteAllTopics,
 } = require('../controllers/learningTopicController');
 
 const {
-  createLesson, getLessons, getLessonById, updateLesson, deleteLesson,
+  createLesson, getLessons, getLessonById, updateLesson, deleteLesson, reorderLessons, deleteAllLessons,
 } = require('../controllers/learningLessonController');
 
 const {
-  createVideoTutorial, getVideoTutorials, updateVideoTutorial, deleteVideoTutorial,
+  createVideoTutorial, getVideoTutorials, updateVideoTutorial, deleteVideoTutorial, deleteAllVideos,
 } = require('../controllers/videoTutorialController');
 
 const {
-  createQuiz, getQuizzes, getQuizById, updateQuiz, deleteQuiz,
+  createQuiz, getQuizzes, getQuizById, updateQuiz, deleteQuiz, deleteAllQuizzes, deleteAllQuizzesGlobal,
 } = require('../controllers/learningQuizController');
 
 const { startAttempt, submitAttempt } = require('../controllers/learningQuizAttemptController');
-const { upsertLessonProgress } = require('../controllers/studentLessonProgressController');
+const { upsertLessonProgress } = require('../Exam and Student Managing/controllers/studentLessonProgressController');
 const { getCatalog } = require('../controllers/learningCatalogController');
 const { quizAnalytics, lessonAnalytics, topicAnalytics } = require('../controllers/learningAnalyticsController');
-const { getStudentPerformance, getStudentQuizHistory, getStudentLessonProgress } = require('../controllers/studentPerformanceController');
+const { getStudentPerformance, getStudentQuizHistory, getStudentLessonProgress } = require('../Exam and Student Managing/controllers/studentPerformanceController');
 
 // Student catalog/progress/attempts
 router.get('/catalog', protect, getCatalog);
@@ -41,6 +41,8 @@ router.get('/student/lesson-progress', protect, getStudentLessonProgress);
 router.route('/topics')
   .get(protect, getTopics)
   .post(protect, adminOnly, createTopic);
+router.post('/topics/reorder', protect, adminOnly, reorderTopics);
+router.delete('/topics/delete-all', protect, adminOnly, deleteAllTopics);
 router.route('/topics/:id')
   .get(protect, getTopicById)
   .put(protect, adminOnly, updateTopic)
@@ -50,6 +52,8 @@ router.route('/topics/:id')
 router.route('/lessons')
   .get(protect, getLessons)
   .post(protect, adminOnly, createLesson);
+router.post('/lessons/reorder', protect, adminOnly, reorderLessons);
+router.delete('/lessons/all/:topicId', protect, adminOnly, deleteAllLessons);
 router.route('/lessons/:id')
   .get(protect, getLessonById)
   .put(protect, adminOnly, updateLesson)
@@ -59,6 +63,7 @@ router.route('/lessons/:id')
 router.route('/videos')
   .get(protect, getVideoTutorials)
   .post(protect, adminOnly, videoUpload.single('video'), createVideoTutorial);
+router.delete('/videos/all/:lessonId', protect, adminOnly, deleteAllVideos);
 router.route('/videos/:id')
   .put(protect, adminOnly, videoUpload.single('video'), updateVideoTutorial)
   .delete(protect, adminOnly, deleteVideoTutorial);
@@ -67,6 +72,8 @@ router.route('/videos/:id')
 router.route('/quizzes')
   .get(protect, getQuizzes)
   .post(protect, adminOnly, createQuiz);
+router.delete('/quizzes/all/:lessonId', protect, adminOnly, deleteAllQuizzes);
+router.delete('/quizzes/delete-all', protect, adminOnly, deleteAllQuizzesGlobal);
 router.route('/quizzes/:id')
   .get(protect, getQuizById)
   .put(protect, adminOnly, updateQuiz)

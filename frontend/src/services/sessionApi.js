@@ -29,5 +29,8 @@ export const markAttendance       = (data)       => api.post('/attendance', data
 export const getSessionAttendance = (sessionId)  => api.get(`/attendance/session/${sessionId}`);
 export const getStudentAttendance = (studentId)  => api.get(`/attendance/student/${studentId}`);
 export const updateAttendance     = (id, data)   => api.put(`/attendance/${id}`, data);
+export const deleteAttendance     = (id)         => api.delete(`/attendance/${id}`);
 export const getAnalytics         = (params)     => api.get('/attendance/analytics', { params });
 export const getStudentProgress   = (studentId)  => api.get(`/attendance/progress/${studentId}`);
+export const selfMarkAttendance  = (data)       => api.post('/attendance/self-mark', data);
+export const confirmAttendance    = (data)       => api.post('/attendance/confirm', data);

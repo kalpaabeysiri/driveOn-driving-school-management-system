@@ -13,11 +13,11 @@ export default function StudentLearningScreen({ navigation }) {
   const renderTabContent = () => {
     switch (activeTab) {
       case 'lessons':
-        return <LessonsTab navigation={navigation} />;
+        return <LessonsTab navigation={navigation} onTabChange={setActiveTab} />;
       case 'quizzes':
-        return <QuizzesTab navigation={navigation} />;
+        return <QuizzesTab navigation={navigation} onTabChange={setActiveTab} />;
       case 'performance':
-        return <PerformanceTab navigation={navigation} />;
+        return <PerformanceTab navigation={navigation} onTabChange={setActiveTab} />;
       default:
         return <LessonsTab navigation={navigation} />;
     }
