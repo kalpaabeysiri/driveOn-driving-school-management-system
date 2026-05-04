@@ -13,6 +13,8 @@ export const assignStudentToTheoryExam = (examId, studentId) =>
 export const unassignStudentFromTheoryExam = (examId, studentId) => 
   api.post(`/exams/theory/${examId}/unassign-student`, { studentId });
 
+
+//test 
 // ── Practical Exams ──────────────────────────────────────────────────────────────
 export const getPracticalExams = (params) => api.get('/exams/practical', { params });
 export const getPracticalExamById = (id) => api.get(`/exams/practical/${id}`);

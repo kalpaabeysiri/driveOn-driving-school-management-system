@@ -34,9 +34,11 @@ const EditPracticalExamScreen = ({ navigation, route }) => {
   const [errors, setErrors] = useState({});
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [showStatusPicker, setShowStatusPicker]   = useState(false);
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
 
   const vehicleCategories = ['Light', 'Heavy', 'Bike'];
   const statuses          = ['Scheduled', 'Completed', 'Cancelled'];
+  const locations         = ['DMT Colombo Test Track', 'DMT Kandy Test Track', 'DMT Galle Test Track'];
 
   const validateForm = () => {
     const newErrors = {};
@@ -78,7 +80,11 @@ const EditPracticalExamScreen = ({ navigation, route }) => {
       {options ? (
         <TouchableOpacity
           style={styles.pickerContainer}
-          onPress={() => field === 'vehicleCategory' ? setShowVehiclePicker(true) : setShowStatusPicker(true)}
+          onPress={() => {
+            if (field === 'vehicleCategory') setShowVehiclePicker(true);
+            else if (field === 'status') setShowStatusPicker(true);
+            else if (field === 'trialLocation') setShowLocationPicker(true);
+          }}
         >
           <Text style={styles.pickerText}>{formData[field] || placeholder}</Text>
           <Ionicons name="chevron-down" size={16} color={COLORS.textMuted} />
@@ -119,7 +125,7 @@ const EditPracticalExamScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {renderFormField('Trial Location', 'trialLocation', 'Enter trial location')}
+          {renderFormField('Trial Location', 'trialLocation', 'Select trial location', 'default', locations)}
           {renderFormField('Vehicle Category', 'vehicleCategory', 'Select category', 'default', vehicleCategories)}
           {renderFormField('Status', 'status', 'Select status', 'default', statuses)}
           {renderFormField('Examiner (Optional)', 'examiner', 'Enter examiner name')}
@@ -159,6 +165,15 @@ const EditPracticalExamScreen = ({ navigation, route }) => {
         options={statuses}
         title="Select Status"
         selectedValue={formData.status}
+      />
+
+      <SimplePicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={(trialLocation) => setFormData({ ...formData, trialLocation })}
+        options={locations}
+        title="Select Trial Location"
+        selectedValue={formData.trialLocation}
       />
     </SafeAreaView>
   );

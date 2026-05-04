@@ -20,6 +20,7 @@ const theoryExamSchema = new mongoose.Schema({
   },
   locationOrHall: {
     type: String,
+    enum: ['DMT Head Office - Colombo', 'DMT Kandy Branch', 'DMT Jaffna Branch', 'DMT Matara Branch'],
     required: true,
     trim: true
   },

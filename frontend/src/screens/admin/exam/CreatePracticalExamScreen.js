@@ -15,6 +15,7 @@ import { KeyboardAvoidingView } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { COLORS } from '../../../theme';
 import { createPracticalExam } from '../../../services/examApi';
+import SimplePicker from '../../../components/admin/exam/SimplePicker';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 const CreatePracticalExamScreen = ({ navigation }) => {
@@ -32,6 +33,7 @@ const CreatePracticalExamScreen = ({ navigation }) => {
 
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [showLocationPicker, setShowLocationPicker] = useState(false);
   
   // Date/Time picker states
   const [showDatePicker, setShowDatePicker] = useState(false);
@@ -43,6 +45,7 @@ const CreatePracticalExamScreen = ({ navigation }) => {
 
   const vehicleCategories = ['Light', 'Heavy', 'Bike'];
   const statuses = ['Scheduled', 'Completed', 'Cancelled'];
+  const locations = ['DMT Colombo Test Track', 'DMT Kandy Test Track', 'DMT Galle Test Track'];
 
   const formatDate = (date) => {
     const d = new Date(date);
@@ -275,12 +278,13 @@ const CreatePracticalExamScreen = ({ navigation }) => {
 
           {/* Trial Location */}
           <Text style={styles.label}>Trial Location *</Text>
-          <TextInput
-            style={[styles.input, errors.trialLocation && styles.inputError]}
-            placeholder="Enter trial location"
-            value={formData.trialLocation}
-            onChangeText={(text) => handleChange('trialLocation', text)}
-          />
+          <TouchableOpacity
+            style={styles.pickerBtn}
+            onPress={() => setShowLocationPicker(true)}
+          >
+            <Text style={styles.pickerText}>{formData.trialLocation || 'Select trial location'}</Text>
+            <Ionicons name="chevron-down" size={18} color={COLORS.textMuted} />
+          </TouchableOpacity>
           {errors.trialLocation && <Text style={styles.errorText}>{errors.trialLocation}</Text>}
 
           {/* Vehicle Category */}
@@ -365,6 +369,15 @@ const CreatePracticalExamScreen = ({ navigation }) => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <SimplePicker
+        visible={showLocationPicker}
+        onClose={() => setShowLocationPicker(false)}
+        onSelect={(loc) => handleChange('trialLocation', loc)}
+        options={locations}
+        title="Select Trial Location"
+        selectedValue={formData.trialLocation}
+      />
     </SafeAreaView>
   );
 };
