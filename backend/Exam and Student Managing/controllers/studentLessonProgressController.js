@@ -1,8 +1,7 @@
 const StudentLessonProgress = require('../models/StudentLessonProgress');
 const Student = require('../../models/Student');
 
-// @desc   Upsert lesson progress (Student)
-// @route  POST /api/learning/progress/lessons/:lessonId
+//upsert lesson progress
 const upsertLessonProgress = async (req, res) => {
   try {
     const studentId = req.user.id;

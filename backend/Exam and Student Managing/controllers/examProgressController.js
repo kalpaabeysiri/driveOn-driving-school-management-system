@@ -6,9 +6,7 @@ const ExamResult = require('../models/ExamResult');
 const AttendanceRecord = require('../models/AttendanceRecord');
 const mongoose = require('mongoose');
 
-// @desc    Get progress for all students
-// @route   GET /api/progress/students
-// @access Private (Admin, Instructor)
+//get progress for all students
 const getAllStudentProgress = async (req, res) => {
   try {
     const rawCount = await StudentProgress.countDocuments({});
@@ -61,9 +59,7 @@ const getAllStudentProgress = async (req, res) => {
   }
 };
 
-// @desc    Get progress for a specific student
-// @route   GET /api/progress/students/:studentId
-// @access Private (Admin, Instructor, Student for own profile)
+//get progress for a specific student
 const getStudentProgress = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -155,9 +151,7 @@ const getStudentProgress = async (req, res) => {
   }
 };
 
-// @desc    Update student progress (called after exam results, assignments, etc.)
-// @route   POST /api/progress/students/:studentId/update
-// @access Private (Admin, System)
+//update student progress (called after exam results, assignments, etc.)
 const updateStudentProgress = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -278,9 +272,7 @@ const updateStudentProgress = async (req, res) => {
   }
 };
 
-// @desc    Get progress statistics (for dashboard)
-// @route   GET /api/progress/stats
-// @access Private (Admin, Instructor)
+//get progress statistics (for dashboard)
 const getProgressStats = async (req, res) => {
   try {
     const stats = await StudentProgress.aggregate([
@@ -337,9 +329,7 @@ const getProgressStats = async (req, res) => {
   }
 };
 
-// @desc    Recalculate progress for ALL students (fixes stale/inconsistent data)
-// @route   POST /api/exam-progress/recalculate-all
-// @access  Private (Admin only)
+//recalculate progress for ALL students (fixes stale/inconsistent data)
 const recalculateAllProgress = async (req, res) => {
   try {
     const allProgress = await StudentProgress.find({}).select('student');

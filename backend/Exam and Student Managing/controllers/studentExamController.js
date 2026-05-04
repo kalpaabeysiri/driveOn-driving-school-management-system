@@ -4,9 +4,7 @@ const PracticalExam = require('../models/PracticalExam');
 const Student = require('../../models/Student');
 const mongoose = require('mongoose');
 
-// @desc    Get all exams for current student
-// @route   GET /api/student/me/exams
-// @access Private (Student only)
+//get all exams for current student
 const getStudentExams = async (req, res) => {
   try {
     const studentId = req.user._id;
@@ -70,9 +68,7 @@ const getStudentExams = async (req, res) => {
   }
 };
 
-// @desc    Get specific exam details for student
-// @route   GET /api/student/me/exams/:id
-// @access Private (Student only)
+//get specific exam details for student
 const getStudentExamById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -131,9 +127,7 @@ const getStudentExamById = async (req, res) => {
   }
 };
 
-// @desc    Get exam status for student
-// @route   GET /api/student/me/exam-status
-// @access Private (Student only)
+//get exam status for student
 const getStudentExamStatus = async (req, res) => {
   try {
     const studentId = req.user._id;

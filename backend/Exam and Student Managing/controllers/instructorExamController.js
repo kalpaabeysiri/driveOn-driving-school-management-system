@@ -3,9 +3,7 @@ const TheoryExam = require('../models/TheoryExam');
 const PracticalExam = require('../models/PracticalExam');
 const mongoose = require('mongoose');
 
-// @desc    Get upcoming exams for instructor
-// @route   GET /api/instructor/exams/upcoming
-// @access Private (Instructor only)
+//get upcoming exams for instructor
 const getInstructorUpcomingExams = async (req, res) => {
   try {
     const instructorId = req.user._id;
@@ -82,9 +80,7 @@ const getInstructorUpcomingExams = async (req, res) => {
   }
 };
 
-// @desc    Get upcoming exam counts for instructor
-// @route   GET /api/instructor/exams/upcoming/counts
-// @access Private (Instructor only)
+//get upcoming exam counts for instructor
 const getInstructorUpcomingExamCounts = async (req, res) => {
   try {
     const instructorId = req.user._id;

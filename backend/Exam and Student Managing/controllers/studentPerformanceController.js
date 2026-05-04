@@ -4,8 +4,7 @@ const StudentLessonProgress = require('../models/StudentLessonProgress');
 const LearningQuiz = require('../../models/LearningQuiz');
 const LearningLesson = require('../../models/LearningLesson');
 
-// @desc   Get student performance summary (Student)
-// @route  GET /api/learning/student/performance
+//get student performance summary
 const getStudentPerformance = async (req, res) => {
   try {
     const studentId = req.user.id;
@@ -187,8 +186,7 @@ const getStudentPerformance = async (req, res) => {
   }
 };
 
-// @desc   Get student quiz history (Student)
-// @route  GET /api/learning/student/quiz-history
+//get student quiz history
 const getStudentQuizHistory = async (req, res) => {
   try {
     const studentId = req.user.id;
@@ -203,8 +201,7 @@ const getStudentQuizHistory = async (req, res) => {
   }
 };
 
-// @desc   Get student lesson progress (Student)
-// @route  GET /api/learning/student/lesson-progress
+//get student lesson progress
 const getStudentLessonProgress = async (req, res) => {
   try {
     const studentId = req.user.id;

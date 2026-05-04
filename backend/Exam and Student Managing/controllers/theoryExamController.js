@@ -4,9 +4,7 @@ const StudentProgress = require('../models/StudentProgress');
 const ExamResult = require('../models/ExamResult');
 const mongoose = require('mongoose');
 
-// @desc    Create new theory exam
-// @route   POST /api/exams/theory
-// @access Private (Admin only)
+
 const createTheoryExam = async (req, res) => {
   try {
     const {
@@ -77,9 +75,7 @@ const createTheoryExam = async (req, res) => {
   }
 };
 
-// @desc    Update theory exam
-// @route   PUT /api/exams/theory/:id
-// @access Private (Admin only)
+
 const updateTheoryExam = async (req, res) => {
   try {
     const { id } = req.params;
@@ -147,9 +143,7 @@ const updateTheoryExam = async (req, res) => {
   }
 };
 
-// @desc    Delete theory exam
-// @route   DELETE /api/exams/theory/:id
-// @access Private (Admin only)
+//delete theory exam
 const deleteTheoryExam = async (req, res) => {
   try {
     const { id } = req.params;
@@ -176,9 +170,7 @@ const deleteTheoryExam = async (req, res) => {
   }
 };
 
-// @desc    Get all theory exams
-// @route   GET /api/exams/theory
-// @access Private (Admin, Instructor, Student)
+//get all theory exams
 const getTheoryExams = async (req, res) => {
   try {
     const { status, dateFrom, dateTo, language, upcoming } = req.query;
@@ -216,9 +208,8 @@ const getTheoryExams = async (req, res) => {
   }
 };
 
-// @desc    Get theory exam by ID
-// @route   GET /api/exams/theory/:id
-// @access Private (Admin, Instructor, Student)
+//get theory exam by id
+
 const getTheoryExamById = async (req, res) => {
   try {
     const exam = await TheoryExam.findById(req.params.id)
@@ -244,9 +235,7 @@ const getTheoryExamById = async (req, res) => {
   }
 };
 
-// @desc    Get assignable students for a theory exam
-// @route   GET /api/exams/theory/:id/assignable-students
-// @access Private (Admin only)
+//get assignable students for a theory exam
 const getAssignableStudents = async (req, res) => {
   try {
     const exam = await TheoryExam.findById(req.params.id);
@@ -327,9 +316,7 @@ const getAssignableStudents = async (req, res) => {
   }
 };
 
-// @desc    Assign student to theory exam
-// @route   POST /api/exams/theory/:id/assign-student
-// @access Private (Admin only)
+// assign student to theory exam
 const assignStudentToTheoryExam = async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -405,9 +392,7 @@ const assignStudentToTheoryExam = async (req, res) => {
   }
 };
 
-// @desc    Unassign student from theory exam
-// @route   POST /api/exams/theory/:id/unassign-student
-// @access Private (Admin only)
+// unassign student from theory exam
 const unassignStudentFromTheoryExam = async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -456,9 +441,7 @@ const unassignStudentFromTheoryExam = async (req, res) => {
   }
 };
 
-// @desc    Get upcoming theory exams (for dashboard)
-// @route   GET /api/exams/theory/upcoming
-// @access Private
+// get upcoming theory exams (for dashboard)
 const getUpcomingTheoryExams = async (req, res) => {
   try {
     const exams = await TheoryExam.find({

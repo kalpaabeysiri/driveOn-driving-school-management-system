@@ -4,9 +4,7 @@ const StudentProgress = require('../models/StudentProgress');
 const ExamResult = require('../models/ExamResult');
 const mongoose = require('mongoose');
 
-// @desc    Get all practical exams
-// @route   GET /api/exams/practical
-// @access Private (Admin, Instructor, Student)
+//get all practical exams
 const getPracticalExams = async (req, res) => {
   try {
     const { status, dateFrom, dateTo, vehicleCategory, upcoming } = req.query;
@@ -46,9 +44,7 @@ const getPracticalExams = async (req, res) => {
   }
 };
 
-// @desc    Get practical exam by ID
-// @route   GET /api/exams/practical/:id
-// @access Private (Admin, Instructor, Student)
+//get practical exam by id
 const getPracticalExamById = async (req, res) => {
   try {
     const exam = await PracticalExam.findById(req.params.id)
@@ -76,9 +72,7 @@ const getPracticalExamById = async (req, res) => {
   }
 };
 
-// @desc    Get assignable students for a practical exam
-// @route   GET /api/exams/practical/:id/assignable-students
-// @access Private (Admin only)
+//get assignable students for a practical exam
 const getAssignableStudents = async (req, res) => {
   try {
     const exam = await PracticalExam.findById(req.params.id);
@@ -178,9 +172,7 @@ const getAssignableStudents = async (req, res) => {
   }
 };
 
-// @desc    Assign student to practical exam
-// @route   POST /api/exams/practical/:id/assign-student
-// @access Private (Admin only)
+//assign student to practical exam
 const assignStudentToPracticalExam = async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -261,9 +253,7 @@ const assignStudentToPracticalExam = async (req, res) => {
   }
 };
 
-// @desc    Unassign student from practical exam
-// @route   POST /api/exams/practical/:id/unassign-student
-// @access Private (Admin only)
+//unassign student from practical exam
 const unassignStudentFromPracticalExam = async (req, res) => {
   try {
     const { studentId } = req.body;
@@ -312,9 +302,7 @@ const unassignStudentFromPracticalExam = async (req, res) => {
   }
 };
 
-// @desc    Get upcoming practical exams (for dashboard)
-// @route   GET /api/exams/practical/upcoming
-// @access Private
+//get upcoming practical exams (for dashboard)
 const getUpcomingPracticalExams = async (req, res) => {
   try {
     const exams = await PracticalExam.find({
@@ -341,9 +329,7 @@ const getUpcomingPracticalExams = async (req, res) => {
   }
 };
 
-// @desc    Create new practical exam
-// @route   POST /api/exams/practical
-// @access Private (Admin only)
+//create new practical exam
 const createPracticalExam = async (req, res) => {
   try {
     const {
@@ -416,9 +402,7 @@ const createPracticalExam = async (req, res) => {
   }
 };
 
-// @desc    Update practical exam
-// @route   PUT /api/exams/practical/:id
-// @access Private (Admin only)
+//update practical exam
 const updatePracticalExam = async (req, res) => {
   try {
     const { id } = req.params;
@@ -488,9 +472,7 @@ const updatePracticalExam = async (req, res) => {
   }
 };
 
-// @desc    Delete practical exam
-// @route   DELETE /api/exams/practical/:id
-// @access Private (Admin only)
+//delete practical exam
 const deletePracticalExam = async (req, res) => {
   try {
     const { id } = req.params;
@@ -517,9 +499,7 @@ const deletePracticalExam = async (req, res) => {
   }
 };
 
-// @desc    Import/seed practical exams (restricted endpoint)
-// @route   POST /api/exams/practical/import
-// @access Private (Admin only - for seeding/importing)
+//import/seed practical exams (restricted endpoint)
 const importPracticalExams = async (req, res) => {
   try {
     const { exams } = req.body;

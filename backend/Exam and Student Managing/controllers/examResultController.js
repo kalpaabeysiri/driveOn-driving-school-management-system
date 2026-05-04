@@ -5,9 +5,7 @@ const StudentProgress = require('../models/StudentProgress');
 const Student = require('../../models/Student');
 const mongoose = require('mongoose');
 
-// @desc    Create exam result
-// @route   POST /api/results
-// @access Private (Admin only)
+//create exam result
 const createExamResult = async (req, res) => {
   try {
     const {
@@ -85,9 +83,7 @@ const createExamResult = async (req, res) => {
   }
 };
 
-// @desc    Get results for a student
-// @route   GET /api/results/student/:studentId
-// @access Private (Admin, Instructor, Student for own profile)
+//get results for a student
 const getStudentResults = async (req, res) => {
   try {
     const { studentId } = req.params;
@@ -173,9 +169,7 @@ const getStudentResults = async (req, res) => {
   }
 };
 
-// @desc    Get results for an exam
-// @route   GET /api/results/exam/:examType/:examId
-// @access Private (Admin, Instructor)
+//get results for an exam
 const getExamResults = async (req, res) => {
   try {
     const { examType, examId } = req.params;
@@ -222,9 +216,7 @@ const getExamResults = async (req, res) => {
   }
 };
 
-// @desc    Get result statistics
-// @route   GET /api/results/stats
-// @access Private (Admin, Instructor)
+//get result statistics
 const getResultStats = async (req, res) => {
   try {
     const { dateFrom, dateTo, examType } = req.query;

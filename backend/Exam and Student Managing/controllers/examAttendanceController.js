@@ -3,9 +3,7 @@ const Student = require('../../models/Student');
 const Instructor = require('../../models/Instructor');
 const mongoose = require('mongoose');
 
-// @desc    Get all attendance records
-// @route   GET /api/attendance
-// @access Private (Admin, Instructor)
+//get all attendance records
 const getAttendanceRecords = async (req, res) => {
   try {
     const { 
@@ -65,9 +63,7 @@ const getAttendanceRecords = async (req, res) => {
   }
 };
 
-// @desc    Create attendance record
-// @route   POST /api/attendance
-// @access Private (Admin, Instructor)
+//create attendance record
 const createAttendanceRecord = async (req, res) => {
   try {
     const {
@@ -134,9 +130,7 @@ const createAttendanceRecord = async (req, res) => {
   }
 };
 
-// @desc    Get attendance analytics
-// @route   GET /api/attendance/analytics
-// @access Private (Admin, Instructor)
+//get attendance analytics
 const getAttendanceAnalytics = async (req, res) => {
   try {
     const { dateFrom, dateTo, attendanceType, period = 'monthly' } = req.query;
@@ -225,9 +219,7 @@ const getAttendanceAnalytics = async (req, res) => {
   }
 };
 
-// @desc    Get attendance reports
-// @route   GET /api/attendance/reports
-// @access Private (Admin)
+//get attendance reports
 const getAttendanceReports = async (req, res) => {
   try {
     const { reportType, dateFrom, dateTo, attendanceType } = req.query;
